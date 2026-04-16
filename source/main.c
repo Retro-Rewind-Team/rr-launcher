@@ -30,6 +30,7 @@
 #include <sys/statvfs.h>
 #include <errno.h>
 #include <dirent.h>
+#include <bitflags.h>
 
 #include "loader/disc_loader.h"
 #include "shutdown.h"
@@ -51,6 +52,8 @@
 #include "exception.h"
 #include "sd.h"
 #include "pad.h"
+#include "crash.h"
+#include "ephfile.h"
 
 /* 100ms */
 #define DISKCHECK_DELAY 100000
@@ -104,6 +107,7 @@ int main(int argc, char **argv)
     RRC_ASSERTEQ(res, 1, "PAD_Init");
     res = WPAD_Init();
     RRC_ASSERTEQ(res, WPAD_ERR_NONE, "WPAD_Init");
+
     bool first_open = false;
 
     FILE *afd = fopen("sd:/RetroRewindChannel/accept.txt", "r");
@@ -152,6 +156,48 @@ int main(int argc, char **argv)
         fclose(afd);
     }
 
+    rrc_con_update("Load settings", 5);
+    struct rrc_settingsfile stored_settings;
+    struct rrc_result settingsfile_res = rrc_settingsfile_parse(&stored_settings);
+    if (rrc_result_is_error(settingsfile_res))
+    {
+        char *lines[] = {
+            rrc_result_strerror(settingsfile_res),
+            (char *)rrc_result_context(settingsfile_res),
+            "It may be possible to fix this by recreating the file.",
+            "Recreate now?",
+        };
+        rrc_result_free(settingsfile_res);
+
+        enum rrc_prompt_result prompt_res = rrc_prompt_yes_no(xfb, lines, 4);
+
+        if (prompt_res == RRC_PROMPT_RESULT_YES)
+        {
+            settingsfile_res = rrc_settingsfile_create();
+            if (rrc_result_is_error(settingsfile_res))
+            {
+                char *lines[] = {
+                    "Failed to recreate settings file.",
+                    rrc_result_strerror(settingsfile_res),
+                    (char *)rrc_result_context(settingsfile_res),
+                    "Defaults will be used with no changes on the SD card.",
+                };
+                rrc_prompt_1_option(xfb, lines, 4, "OK");
+            }
+            rrc_result_free(settingsfile_res);
+        }
+
+        // `rrc_settingsfile_parse()` always initializes the settingsfile, so even in case of an error here,
+        // it is initialized with defaults and we can continue with that.
+    }
+
+    bool crashed = false;
+    if(rrc_launched_after_crash())
+    {
+        crashed = true;
+        rrc_crash_handle(xfb, &stored_settings);
+    }
+
     rrc_con_update("Initialise DVD", 10);
     int fd = rrc_di_init();
     RRC_ASSERT(fd != 0, "rrc_di_init");
@@ -196,42 +242,9 @@ int main(int argc, char **argv)
     rrc_dbg_printf("FST offset: %d\n", data_header->fst_offset << 2);
     rrc_dbg_printf("FST size: %d\n", data_header->fst_size << 2);
 
-    rrc_con_update("Load settings", 20);
-    struct rrc_settingsfile stored_settings;
-    struct rrc_result settingsfile_res = rrc_settingsfile_parse(&stored_settings);
-    if (rrc_result_is_error(settingsfile_res))
-    {
-        char *lines[] = {
-            rrc_result_strerror(settingsfile_res),
-            (char *)rrc_result_context(settingsfile_res),
-            "It may be possible to fix this by recreating the file.",
-            "Recreate now?",
-        };
-        enum rrc_prompt_result prompt_res = rrc_prompt_yes_no(xfb, lines, 4);
-        rrc_result_free(settingsfile_res);
-
-        if (prompt_res == RRC_PROMPT_RESULT_YES)
-        {
-            settingsfile_res = rrc_settingsfile_create();
-            if (rrc_result_is_error(settingsfile_res))
-            {
-                char *lines[] = {
-                    "Failed to recreate settings file.",
-                    rrc_result_strerror(settingsfile_res),
-                    (char *)rrc_result_context(settingsfile_res),
-                    "Defaults will be used with no changes on the SD card.",
-                };
-                rrc_prompt_1_option(xfb, lines, 4, "OK");
-            }
-            rrc_result_free(settingsfile_res);
-        }
-
-        // `rrc_settingsfile_parse()` always initializes the settingsfile, so even in case of an error here,
-        // it is initialized with defaults and we can continue with that.
-    }
-
-    // Check for updates if the user enabled that setting.
-    if (stored_settings.auto_update)
+    bool loaded_from_rr = rrc_launched_from_rr();
+    // Check for updates if the user enabled that setting. Skip if we loaded from the game since this will have already ran.
+    if (stored_settings.auto_update && !loaded_from_rr && !crashed)
     {
 
         int update_count;
@@ -262,7 +275,8 @@ int main(int argc, char **argv)
         {
             break;
         }
-        else if (rrc_pad_b_pressed(pad) || first_open)
+        // Only allow auto launch if this is a successful first boot
+        else if (rrc_pad_b_pressed(pad) || first_open || loaded_from_rr || crashed)
         {
             struct rrc_result r;
             int out = rrc_settings_display(xfb, &stored_settings, &r);

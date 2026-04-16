@@ -28,6 +28,10 @@
 #define RRC_BI2_SIZE 0x2000
 #define RRC_PATCH_COPY_ADDRESS 0x80900000
 #define RRC_SIGNATURE_ADDRESS 0x817ffff8
+#define RRC_SIGNATURE_VALUE 0xDEADBEEF
+
+bool rrc_signature_written();
+
 #define RRC_RUNTIME_EXT_ABI_VERSION_ADDRESS 0x817ffffc
 // Must be kept in sync with runtime-ext/base.ld's PROVIDE and pulsar
 #define RRC_RR_BITFLAGS 0x817ffff0

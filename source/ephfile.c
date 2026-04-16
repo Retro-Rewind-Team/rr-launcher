@@ -1,5 +1,5 @@
 /*
-    util.c - utility function implementations
+    ephfile.c - Routines for handling of ephemeral files
 
     Copyright (C) 2025  Retro Rewind Team
 
@@ -17,31 +17,19 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include <gctypes.h>
-#include <sys/statvfs.h>
+#include <stdio.h>
 #include <gccore.h>
-#include "result.h"
 
-u32 align_down(u32 num, u32 align_as)
+#include "ephfile.h"
+
+bool rrc_launched_from_rr()
 {
-    return num & -align_as;
-}
-
-u32 align_up(u32 num, u32 align_as)
-{
-    return (num + align_as - 1) & -align_as;
-}
-
-void rrc_invalidate_cache(void *addr, u32 size)
-{
-    // Must be aligned to a 32 byte boundary.
-    addr = (void *)align_down((u32)addr, 32);
-
-    // Size must be a multiple of 32.
-    // We add 32 to the size so that in case the address was not aligned and we had to align down,
-    // we don't end up skipping the last cache line.
-    size = align_up(size + 32, 32);
-
-    DCFlushRange(addr, size);
-    ICInvalidateRange(addr, size);
+    FILE *f = fopen(RRC_LAUNCHED_FROM_RR_FILE_PATH, "r");
+    if (f)
+    {
+        fclose(f);
+        remove(RRC_LAUNCHED_FROM_RR_FILE_PATH);
+        return true;
+    }
+    return false;
 }

@@ -115,3 +115,16 @@ int rrc_sd_get_folder_file_count(const char *path, struct rrc_result *out_err)
     closedir(dir);
     return count;
 }
+
+struct rrc_result rrc_sd_get_free_space(unsigned long *res)
+{
+    struct statvfs sbx;
+    int rr = statvfs("/dev/sd", &sbx);
+    if (rr != 0)
+    {
+        return rrc_result_create_error_errno(errno, "Failed to get free space on SD card");
+    }
+
+    *res = sbx.f_bavail * sbx.f_frsize;
+    return rrc_result_success;
+}

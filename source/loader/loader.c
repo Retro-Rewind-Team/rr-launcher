@@ -42,6 +42,11 @@
 #include "../settingsfile.h"
 #include <bitflags.h>
 
+bool rrc_signature_written()
+{
+    return *((u32 *)RRC_SIGNATURE_ADDRESS) == RRC_SIGNATURE_VALUE;
+}
+
 /**
  * Patches the DVD functions in the game DOL to immediately jump to custom DVD functions implemented in runtime-ext.
  * Also allocates trampolines containing the first 4 overwritten instructions + backjump to the original function,
@@ -203,7 +208,7 @@ void rrc_loader_load(struct rrc_dol *dol, struct rrc_settingsfile *settings, voi
     DCFlushRange((void *)0x80000000, 0x01800000);
 
     // Signature, used by Pulsar to tell that we've loaded via the new channel instead of Riivolution.
-    *(u32 *)RRC_SIGNATURE_ADDRESS = 0xDEADBEEF;
+    *(u32 *)RRC_SIGNATURE_ADDRESS = RRC_SIGNATURE_VALUE;
     *(u32 *)RRC_RUNTIME_EXT_ABI_VERSION_ADDRESS = RRC_RUNTIME_EXT_ABI_VERSION;
 
     u8 bitflags = 0;

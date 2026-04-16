@@ -29,6 +29,7 @@
 
 #include "versionsfile.h"
 #include "update.h"
+#include "../sd.h"
 #include "../util.h"
 #include "../console.h"
 #include "../time.h"
@@ -299,7 +300,7 @@ struct rrc_result rrc_update_extract_zip_archive()
         }
 
         unsigned long sd_free;
-        TRY(sd_get_free_space(&sd_free));
+        TRY(rrc_sd_get_free_space(&sd_free));
 
         if (stat.size > sd_free)
         {
@@ -418,7 +419,7 @@ struct rrc_result rrc_update_do_updates_with_state(struct rrc_update_state *stat
         }
 
         unsigned long sd_free;
-        TRY(sd_get_free_space(&sd_free));
+        TRY(rrc_sd_get_free_space(&sd_free));
 
         if (zipsz > sd_free)
         {

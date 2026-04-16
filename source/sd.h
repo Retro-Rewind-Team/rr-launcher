@@ -47,4 +47,10 @@ bool rrc_sd_folder_exists(const char *path);
     Gets the number of files in a folder on the SD card at the given path. The path should be absolute.
  */
 int rrc_sd_get_folder_file_count(const char *path, struct rrc_result *out_err);
+
+/**
+    Returns the amount of free space on the sd card in bytes.
+*/
+struct rrc_result rrc_sd_get_free_space(unsigned long *res);
+
 #endif
