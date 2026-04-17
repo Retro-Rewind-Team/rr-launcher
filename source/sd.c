@@ -23,39 +23,57 @@
 #include "sd.h"
 #include <sys/dirent.h>
 #include "update/update.h"
+#include <sdcard/wiisd_io.h>
 
 struct rrc_result rrc_sd_init()
 {
+    /* Manually check if the SD card interface is available */
+    if(!__io_wiisd.startup()) {
+        return rrc_result_create_error_sdcard(EIO, "Couldn't start SD card interface - is it inserted?");
+    }
+
+    /* __io_wiisd caches state so the fat driver won't reinit */
     if (!fatInitDefault())
     {
-        return rrc_result_create_error_sdcard(EIO, "Couldn't mount the SD card - is it inserted?");
+        return rrc_result_create_error_sdcard(EIO, "Couldn't mount the SD card. Is it inserted and properly formatted?");
     }
 
     if (chdir("sd:/") == -1)
     {
-        return rrc_result_create_error_errno(errno, "Failed to set SD card root");
+        return rrc_result_create_error_sdcard(EIO, "Failed to set SD card root");
     }
 
     FILE *file = fopen(RRC_SD_TEST_FILE, "w+");
     if (!file)
     {
-        return rrc_result_create_error_errno(errno, "The SD card is locked.");
+        return rrc_result_create_error_sdcard(EIO, "The SD card is write locked.");
     }
 
     // Test writing to the SD card, then clean up the test file.
-    int res = fprintf(file, "Test");
-    fflush(file);
+    int res = fwrite("1.2.3", 1, 5, file);
 
     if (res <= 0) {
         fclose(file);
-        return rrc_result_create_error_errno(errno, "The SD card is locked.");
+        return rrc_result_create_error_sdcard(EIO, "The SD card is write locked.");
     }
-    fclose(file);
 
-    file = fopen(RRC_VERSIONFILE, "r");
-    if (file == NULL)
+    fflush(file);
+    rewind(file);
+    
+    // Read the file and parse the version to check the write worked
+    char buf[5] = {0};
+    if (fread(buf, 1, 5, file) <= 0)
+    {   
+        fclose(file);
+        return rrc_result_create_error_sdcard(EIO, "The SD card is write locked.");
+    }
+
+    struct rrc_version ver;
+    struct rrc_result verres = rrc_version_from_string(buf, &ver);
+    if (rrc_result_is_error(verres))
     {
-        return rrc_result_create_error_errno(errno, "Failed to open version file.\nThis can happen if the SD card is locked,\nor your Retro Rewind installation is corrupted.");
+        fclose(file);
+        return rrc_result_create_error_sdcard(EIO, "The SD card is write locked.");
     }
 
     fclose(file);
@@ -114,4 +132,17 @@ int rrc_sd_get_folder_file_count(const char *path, struct rrc_result *out_err)
 
     closedir(dir);
     return count;
+}
+
+struct rrc_result rrc_sd_get_free_space(unsigned long long *res)
+{
+    struct statvfs sbx;
+    int rr = statvfs("sd:", &sbx);
+    if (rr != 0)
+    {
+        return rrc_result_create_error_errno(errno, "Failed to get free space on SD card");
+    }
+
+    *res = sbx.f_bfree * sbx.f_frsize;
+    return rrc_result_success;
 }

@@ -154,14 +154,20 @@ void rrc_result_error_check_error_normal(struct rrc_result result, void *xfb)
     char line1[cols];
     snprintf(line1, cols, "Error: %s", rrc_result_strerror(result));
 
+    char *newline_ptr = strchr((char *)result.err->context, '\n');
+    if(newline_ptr) {
+        *newline_ptr = '\0';
+    }
+
     char *lines[] = {
         line1,
         "",
         "Additional info:",
         (char *)result.err->context,
+        newline_ptr ? newline_ptr + 1 : ""
     };
 
-    rrc_prompt_1_option(xfb, lines, 4, "OK");
+    rrc_prompt_1_option(xfb, lines, 5, "OK");
     rrc_result_free(result);
 }
 

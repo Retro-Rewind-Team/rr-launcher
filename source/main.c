@@ -60,7 +60,7 @@ int main(int argc, char **argv)
     // There are bugs in pulsar with USB/HIDv5 if the IOS version is 59, which HBC commonly boots programs with.
     // Use a version used by the game that is known to work with pulsar.
     // FIXME: try to use the disk's IOS version?
-    RRC_ASSERTEQ(IOS_ReloadIOS(37), 0, "Failed to reload IOS");
+    //RRC_ASSERTEQ(IOS_ReloadIOS(37), 0, "Failed to reload IOS");
 
     rrc_shutdown_register_callbacks();
 

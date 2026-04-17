@@ -35,8 +35,9 @@
 #include "../prompt.h"
 #include "../shutdown.h"
 #include "../version.h"
+#include "../sd.h"
 
-#define _RRC_UPDATE_ZIP_NAME "update.zip"
+#define _RRC_UPDATE_ZIP_NAME "rr.update.zip"
 
 struct rrc_result rrc_update_get_current_version(struct rrc_version *version)
 {
@@ -276,6 +277,35 @@ struct rrc_result rrc_update_extract_zip_archive()
     }
 
     u32 zip_entries = zip_get_num_entries(archive, 0);
+    // Find the total uncompressed size of the archive
+    u64 uncompressed_zipsz = 0;
+    for (int i = 0; i < zip_entries; i++)
+    {
+        zip_stat_t stat;
+        zip_stat_init(&stat);
+
+        int err = zip_stat_index(archive, i, 0, &stat);
+        if (err != 0)
+        {
+            return rrc_result_create_error_zip(err, "Failed to stat file in archive");
+        }
+
+        if (stat.valid & ZIP_STAT_SIZE)
+        {
+            uncompressed_zipsz += stat.size;
+        }
+    }
+
+    unsigned long long sd_free;
+    TRY(rrc_sd_get_free_space(&sd_free));
+
+    if (uncompressed_zipsz > sd_free)
+    {
+        // Report sizes
+        char msg[200];
+        snprintf(msg, 200, "Not enough free space on SD card to extract update.\n(Need %llu bytes, have %llu bytes)", (u64)uncompressed_zipsz, (u64)sd_free);
+        return rrc_result_create_error_misc_update(msg);
+    }
 
     char buf[4096];
 
@@ -298,12 +328,14 @@ struct rrc_result rrc_update_extract_zip_archive()
             return rrc_result_create_error_misc_update("Empty file name in ZIP archive");
         }
 
-        unsigned long sd_free;
-        TRY(sd_get_free_space(&sd_free));
+        unsigned long long sd_free;
+        TRY(rrc_sd_get_free_space(&sd_free));
 
         if (stat.size > sd_free)
         {
-            return rrc_result_create_error_misc_update("Not enough free space on SD card for update");
+            char msg[200];
+            snprintf(msg, 200, "Not enough free space on SD card to extract file.\nNeeded: %llu bytes, available: %llu bytes", stat.size, sd_free);
+            return rrc_result_create_error_misc_update(msg);
         }
 
         if (stat.name[strlen(stat.name) - 1] == '/')
@@ -417,12 +449,14 @@ struct rrc_result rrc_update_do_updates_with_state(struct rrc_update_state *stat
             return rrc_result_create_error_curl(szres, "Failed to get update ZIP size");
         }
 
-        unsigned long sd_free;
-        TRY(sd_get_free_space(&sd_free));
+        unsigned long long sd_free;
+        TRY(rrc_sd_get_free_space(&sd_free));
 
-        if (zipsz > sd_free)
+        if (zipsz > sd_free || true) 
         {
-            return rrc_result_create_error_misc_update("Not enough free space on SD card for update");
+            char msg[200];
+            snprintf(msg, 200, "Not enough free space on SD card for update ZIP.\nNeeded: %llu bytes, available: %llu bytes", zipsz, sd_free);
+            return rrc_result_create_error_misc_update(msg);
         }
 
         TRY(rrc_update_download_zip(url, _RRC_UPDATE_ZIP_NAME, state->current_update_num, state->num_updates));
