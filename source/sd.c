@@ -32,6 +32,10 @@ struct rrc_result rrc_sd_init()
         return rrc_result_create_error_sdcard(EIO, "Couldn't start SD card interface - is it inserted?");
     }
 
+    if(!__io_wiisd.isInserted()) {
+        return rrc_result_create_error_sdcard(EIO, "No SD card is inserted.");
+    }
+
     /* __io_wiisd caches state so the fat driver won't reinit */
     if (!fatInitDefault())
     {
