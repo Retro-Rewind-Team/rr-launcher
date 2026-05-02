@@ -32,19 +32,6 @@ u32 align_up(u32 num, u32 align_as)
     return (num + align_as - 1) & -align_as;
 }
 
-struct rrc_result sd_get_free_space(unsigned long *res)
-{
-    struct statvfs sbx;
-    int rr = statvfs("/dev/sd", &sbx);
-    if (rr != 0)
-    {
-        return rrc_result_create_error_errno(errno, "Failed to get free space on SD card");
-    }
-
-    *res = sbx.f_bavail * sbx.f_frsize;
-    return rrc_result_success;
-}
-
 void rrc_invalidate_cache(void *addr, u32 size)
 {
     // Must be aligned to a 32 byte boundary.

@@ -35,8 +35,9 @@
 #include "../prompt.h"
 #include "../shutdown.h"
 #include "../version.h"
+#include "../sd.h"
 
-#define _RRC_UPDATE_ZIP_NAME "update.zip"
+#define _RRC_UPDATE_ZIP_NAME "rr.update.zip"
 
 struct rrc_result rrc_update_get_current_version(struct rrc_version *version)
 {
@@ -105,7 +106,43 @@ struct rrc_result rrc_update_set_current_version(struct rrc_version *version)
 int lp = -1;
 rrc_time_tick last_measurement_from = -1;
 curl_off_t last_dlnow = 0;
-int last_second_dl_amount = 0;
+int dl_speed_avg = 0;
+int est_sec_remaining = 0;
+int last_10_sec_dl_amount[10] = {-1, -1, -1, -1, -1, -1, -1, -1, -1, -1};
+int next_second_write_index = 0;
+
+void _rrc_cleanup_measurement_state()
+{
+    lp = -1;
+    last_measurement_from = -1;
+    last_dlnow = 0;
+    dl_speed_avg = 0;
+    est_sec_remaining = 0;
+    for(int i = 0; i < 10; i++)
+        last_10_sec_dl_amount[i] = -1;
+    next_second_write_index = 0;
+}
+
+void _rrc_zipdl_est_time_remaining_fmt(int est_sec_remaining, char* out, int out_sz)
+{
+    if (est_sec_remaining < 60)
+    {
+        snprintf(out, out_sz, "%i seconds", est_sec_remaining);
+    }
+    else if (est_sec_remaining < 3600)
+    {
+        int min_remaining = est_sec_remaining / 60;
+        int sec_remaining = est_sec_remaining % 60;
+        snprintf(out, out_sz, "%im %is", min_remaining, sec_remaining);
+    }
+    else
+    {
+        int hr_remaining = est_sec_remaining / 3600;
+        int min_remaining = (est_sec_remaining % 3600) / 60;
+        int sec_remaining = est_sec_remaining % 60;
+        snprintf(out, out_sz, "%ih %im %is", hr_remaining, min_remaining, sec_remaining);
+    }
+}
 
 int _rrc_zipdl_progress_callback(int *numinfo,
                                  curl_off_t dltotal,
@@ -115,7 +152,6 @@ int _rrc_zipdl_progress_callback(int *numinfo,
 {
     /* 100kB chunks */
 #define _RRC_PROGRESS_UPD_CHUNKSIZE 100000
-
     /* update download speed every second */
 #define _RRC_PROGRESS_UPD_SPEED_INC 1000
     int progress = (dlnow * 100) / dltotal;
@@ -124,24 +160,51 @@ int _rrc_zipdl_progress_callback(int *numinfo,
     {
         last_measurement_from = gettime();
 
-        last_second_dl_amount = dlnow - last_dlnow;
+        int last_second_dl_amount = dlnow - last_dlnow;
         last_dlnow = dlnow;
+        int remaining_dl = dltotal - dlnow;
+
+        // We take an average of the last 10 seconds of downloading to produce the estimate
+        // On the first pass we flood all 10 seconds with the first reading then move
+        // through the list as a ringbuffer.
+        int dl_speed_sum = 0;
+
+        for(int i = 0; i < 10; i++)
+        {
+            if(last_10_sec_dl_amount[i] == -1)
+                last_10_sec_dl_amount[i] = last_second_dl_amount;
+            dl_speed_sum += last_10_sec_dl_amount[i];
+        }
+
+        last_10_sec_dl_amount[next_second_write_index] = last_second_dl_amount;
+        next_second_write_index++;
+        if(next_second_write_index >= 10) 
+            next_second_write_index = 0;
+
+        dl_speed_avg = dl_speed_sum / 10;
+        if(dl_speed_avg == 0)
+            dl_speed_avg = 1; // Avoid division by zero
+        est_sec_remaining = remaining_dl / dl_speed_avg;
     }
 
     int chunk = dlnow / _RRC_PROGRESS_UPD_CHUNKSIZE;
     if (chunk != lp)
     {
+        char est_time_remaining_fmt[100];
+        _rrc_zipdl_est_time_remaining_fmt(est_sec_remaining, est_time_remaining_fmt, sizeof(est_time_remaining_fmt));
+
         lp = chunk;
         char msg[100];
         snprintf(
             msg,
             100,
-            "Downloading update %i of %i - %i kB/s (%i/%i kB)",
+            "Downloading update %i of %i - %i kB/s (%i/%i kB)\n Est time remaining: %s",
             ((*numinfo) / 100) + 1,
             (*numinfo) % 100,
-            (int)(last_second_dl_amount / 1000),
+            (int)(dl_speed_avg / 1000),
             (int)(dlnow / (curl_off_t)1000),
-            (int)(dltotal / (curl_off_t)1000));
+            (int)(dltotal / (curl_off_t)1000),
+            est_time_remaining_fmt);
 
         rrc_con_update(msg, progress);
     }
@@ -221,14 +284,18 @@ struct rrc_result rrc_update_download_zip(char *url, char *filename, int current
 
             fclose(fp);
             curl_easy_cleanup(curl);
+            _rrc_cleanup_measurement_state();
             return rrc_result_create_error_curl(cres, "Failed to download update ZIP");
         }
 
         fclose(fp);
         curl_easy_cleanup(curl);
+        _rrc_cleanup_measurement_state();
+
         return rrc_result_success;
     }
 
+    _rrc_cleanup_measurement_state();
     return rrc_result_create_error_curl(CURLE_FAILED_INIT, "Failed to init curl");
 }
 
@@ -276,6 +343,35 @@ struct rrc_result rrc_update_extract_zip_archive()
     }
 
     u32 zip_entries = zip_get_num_entries(archive, 0);
+    // Find the total uncompressed size of the archive
+    u64 uncompressed_zipsz = 0;
+    for (int i = 0; i < zip_entries; i++)
+    {
+        zip_stat_t stat;
+        zip_stat_init(&stat);
+
+        int err = zip_stat_index(archive, i, 0, &stat);
+        if (err != 0)
+        {
+            return rrc_result_create_error_zip(err, "Failed to stat file in archive");
+        }
+
+        if (stat.valid & ZIP_STAT_SIZE)
+        {
+            uncompressed_zipsz += stat.size;
+        }
+    }
+
+    unsigned long long sd_free;
+    TRY(rrc_sd_get_free_space(&sd_free));
+
+    if (uncompressed_zipsz > sd_free)
+    {
+        // Report sizes
+        char msg[200];
+        snprintf(msg, 200, "Not enough free space on SD card to extract update.\n(Need %llu bytes, have %llu bytes)", (u64)uncompressed_zipsz, (u64)sd_free);
+        return rrc_result_create_error_misc_update(msg);
+    }
 
     char buf[4096];
 
@@ -298,12 +394,14 @@ struct rrc_result rrc_update_extract_zip_archive()
             return rrc_result_create_error_misc_update("Empty file name in ZIP archive");
         }
 
-        unsigned long sd_free;
-        TRY(sd_get_free_space(&sd_free));
+        unsigned long long sd_free;
+        TRY(rrc_sd_get_free_space(&sd_free));
 
         if (stat.size > sd_free)
         {
-            return rrc_result_create_error_misc_update("Not enough free space on SD card for update");
+            char msg[200];
+            snprintf(msg, 200, "Not enough free space on SD card to extract file.\nNeeded: %llu bytes, available: %llu bytes", stat.size, sd_free);
+            return rrc_result_create_error_misc_update(msg);
         }
 
         if (stat.name[strlen(stat.name) - 1] == '/')
@@ -321,7 +419,7 @@ struct rrc_result rrc_update_extract_zip_archive()
         const char *filepath = stat.name;
 
         char message[128];
-        snprintf(message, sizeof(message), "Extracting %s (%d/%d)", filepath, i + 1, zip_entries);
+        snprintf(message, sizeof(message), "Extract %s (%d/%d)", filepath, i + 1, zip_entries);
         rrc_con_update(message, ((f64)(i + 1) / (f64)zip_entries) * 100);
 
         FILE *outfile = fopen(filepath, "w");
@@ -417,12 +515,14 @@ struct rrc_result rrc_update_do_updates_with_state(struct rrc_update_state *stat
             return rrc_result_create_error_curl(szres, "Failed to get update ZIP size");
         }
 
-        unsigned long sd_free;
-        TRY(sd_get_free_space(&sd_free));
+        unsigned long long sd_free;
+        TRY(rrc_sd_get_free_space(&sd_free));
 
-        if (zipsz > sd_free)
+        if (zipsz > sd_free) 
         {
-            return rrc_result_create_error_misc_update("Not enough free space on SD card for update");
+            char msg[200];
+            snprintf(msg, 200, "Not enough free space on SD card for update ZIP.\nNeeded: %llu bytes, available: %llu bytes", zipsz, sd_free);
+            return rrc_result_create_error_misc_update(msg);
         }
 
         TRY(rrc_update_download_zip(url, _RRC_UPDATE_ZIP_NAME, state->current_update_num, state->num_updates));

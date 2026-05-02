@@ -185,7 +185,7 @@ static bool rte_dvd_resolve_my_stuff_path_to_entry_num(const char *path, s32 *en
     // Work backwards since it's likely it's near the end of the list.
     struct rrc_riivo_disc_replacement *my_stuff_replacement = NULL;
 
-    if(my_stuff_replacement_idx >= 0)
+    if (my_stuff_replacement_idx >= 0)
     {
         my_stuff_replacement = &riivo_disc->replacements[my_stuff_replacement_idx];
         if (my_stuff_replacement->type != RRC_RIIVO_MY_STUFF_REPLACEMENT)
@@ -240,7 +240,7 @@ static bool rte_dvd_resolve_my_stuff_path_to_entry_num(const char *path, s32 *en
     }
 
     bool cached_file_exists = false;
-    for(int i = 0; i < my_stuff_replacement->folder_contents_count; i++)
+    for (int i = 0; i < my_stuff_replacement->folder_contents_count; i++)
     {
         if (strcmp(my_stuff_replacement->folder_contents[i], filename) == 0)
         {
@@ -264,9 +264,9 @@ static bool rte_dvd_resolve_my_stuff_path_to_entry_num(const char *path, s32 *en
 char *strstr1(const char *s1, const char *s2)
 {
     size_t n = strlen(s2);
-    while(*s1)
-        if(!memcmp(s1++,s2,n))
-            return (char *) (s1-1);
+    while (*s1)
+        if (!memcmp(s1++, s2, n))
+            return (char *)(s1 - 1);
     return 0;
 }
 
@@ -293,7 +293,7 @@ static bool rte_dvd_resolve_path_to_entry_num(const char *filename, s32 *entry_n
         case RRC_RIIVO_FILE_REPLACEMENT:
         {
             RTE_DBG("Checking file replacement: '%s' == '%s'\n", replacement->disc, "strm");
-            
+
             // Trim leading slashes from either path.
             const char *disc_path = replacement->disc;
             if (*disc_path == '/')
@@ -391,10 +391,10 @@ static bool rte_dvd_resolve_path_to_entry_num(const char *filename, s32 *entry_n
                 bool cached_file_exists = false;
                 for (int i = 0; i < replacement->folder_contents_count; i++)
                 {
-                    // We need to enforce case insensitivity here because FAT is case-insensitive, 
+                    // We need to enforce case insensitivity here because FAT is case-insensitive,
                     // and the folder_contents are populated based on FAT reads.
 
-                    to_lowercase((char*) replacement->folder_contents[i]);
+                    to_lowercase((char *)replacement->folder_contents[i]);
                     to_lowercase(new_path_filename);
 
                     if (strcmp(replacement->folder_contents[i], new_path_filename) == 0)
@@ -413,7 +413,7 @@ static bool rte_dvd_resolve_path_to_entry_num(const char *filename, s32 *entry_n
                 }
                 else
                 {
-                    RTE_DBG("NOTE: %s not applied because it doesn't exist.\n", disc_path);
+                    OS_Report("NOTE: %s/%s not applied because it doesn't exist.\n", external_path, new_path_filename);
                 }
             }
 
@@ -451,7 +451,7 @@ static void rte_dvd_open_entry_num(s32 entry_num, FileInfo *file_info)
 
         if (fd == -1)
         {
-            RTE_FATAL("FastOpen: SD error (%d)!\n", errno);
+            RTE_FATAL("FastOpen: SD error!\n\nOpen path '%s'\nfailed with error %d\n", etp->path, errno);
         }
 
         if (fd != (u32)file)
