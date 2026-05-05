@@ -37,22 +37,20 @@
 */
 
 #if defined(RRC_BETA) && RRC_BETA >= 1
-#   define RRC_RR_MY_STUFF_PATCH_ID "RRBetaLoad"
-#   define RRC_CTGP_MY_STUFF_PATCH_ID "RRBetaCTGPLoad"
-#   define RRC_RR_MUSIC_MY_STUFF_PATCH_ID "RRBetaLoadMusic"
-#   define RRC_CTGP_MUSIC_MY_STUFF_PATCH_ID "RRBetaCTGPLoadMusic"
+#define RRC_RR_MY_STUFF_PATCH_ID "RRBetaLoad"
+#define RRC_CTGP_MY_STUFF_PATCH_ID "RRBetaCTGPLoad"
+#define RRC_RR_MUSIC_MY_STUFF_PATCH_ID "RRBetaLoadMusic"
+#define RRC_CTGP_MUSIC_MY_STUFF_PATCH_ID "RRBetaCTGPLoadMusic"
 #else
-#   define RRC_RR_MY_STUFF_PATCH_ID "RRLoad"
-#   define RRC_CTGP_MY_STUFF_PATCH_ID "RRCTGPLoad"
-#   define RRC_RR_MUSIC_MY_STUFF_PATCH_ID "RRLoadMusic"
-#   define RRC_CTGP_MUSIC_MY_STUFF_PATCH_ID "RRCTGPLoadMusic"
+#define RRC_RR_MY_STUFF_PATCH_ID "RRLoad"
+#define RRC_CTGP_MY_STUFF_PATCH_ID "RRCTGPLoad"
+#define RRC_RR_MUSIC_MY_STUFF_PATCH_ID "RRLoadMusic"
+#define RRC_CTGP_MUSIC_MY_STUFF_PATCH_ID "RRCTGPLoadMusic"
 #endif
 
 #define MAX_FILE_PATCHES 1000
 #define MAX_MEMORY_PATCHES 128
 #define MAX_ENABLED_SETTINGS (64)
-// We only make the array as big as needed. Almost all folders will be well under this.
-#define MAX_FOLDER_FILES 1500
 /// Across all folders, we cannot cache more than this value.
 #define GLOBAL_MAX_FOLDER_FILES 5000
 

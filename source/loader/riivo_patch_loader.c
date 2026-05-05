@@ -27,6 +27,8 @@
 #include <sys/dirent.h>
 #include "../time.h"
 
+#include <ogc/system.h>
+
 static char *bump_alloc_string(u32 *arena, const char *src)
 {
     int src_len = strlen(src);
@@ -45,7 +47,7 @@ static const char **bump_alloc_string_array(u32 *arena, int count)
 
 bool should_register_patch_mystuff_aware(bool is_rr_mystuff, bool is_ctgpr_mystuff, bool is_rr_music_mystuff, bool is_ctgp_music_mystuff, int my_stuff_setting)
 {
-    if(!is_rr_mystuff && !is_ctgpr_mystuff && !is_rr_music_mystuff && !is_ctgp_music_mystuff)
+    if (!is_rr_mystuff && !is_ctgpr_mystuff && !is_rr_music_mystuff && !is_ctgp_music_mystuff)
         return true;
 
     if (is_rr_mystuff && my_stuff_setting == RRC_SETTINGSFILE_MY_STUFF_RR)
@@ -131,108 +133,177 @@ static struct rrc_result rrc_patch_loader_append_patches_for_option(
     return rrc_result_create_error_corrupted_rr_xml("option not found in xml");
 }
 
-/**
- * Collects all *direct* files (does not visit subdirectories) in the given folder and returns them.
- *
- * `main_dol_replacement_path` may be NULL, in which case main.dol is ignored,
- * but if it's non-null, the external SD path will be copied into it
- * (this is a slight hack that will be cleaned up as part of the replacement rework).
- */
-const char **rrc_riivo_patch_loader_get_entries_in_replaced_folder(u32 *arena,
-                                                                   const char *folder_path,
-                                                                   int *out_count,
-                                                                   char *main_dol_replacement_path)
+struct vec
 {
-    DIR *dir = opendir(folder_path);
-    if (!dir)
-    {
-        rrc_dbg_printf("Failed to open folder '%s' to read contents: %d\n", folder_path, errno);
-        *out_count = -1;
-        return NULL;
-    }
+    void *data;
+    int value_size;
+    int len;
+    int cap;
+};
 
-    int cap = 4;
-    const char **entries = malloc(sizeof(char *) * cap);
-    RRC_ASSERT(entries != NULL, "OOM while allocating space for folder entries");
-
-    struct dirent *entry;
-    int i = 0;
-    while ((entry = readdir(dir)) != NULL)
-    {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0 || entry->d_type != DT_REG)
-            continue;
-
-        if (strcmp(entry->d_name, "main.dol") == 0)
-        {
-            if (main_dol_replacement_path != NULL)
-            {
-                snprintf(main_dol_replacement_path, PATH_MAX, "%s/main.dol", folder_path);
-            }
-            continue; // No need to store this entry in any case as main.dol is never replaced at runtime.
-        }
-
-        // Ignore AppleDouble metadata files.
-        if (strlen(entry->d_name) > 1 && entry->d_name[0] == '.' && entry->d_name[1] == '_')
-            continue;
-
-        if (i >= cap)
-        {
-            cap *= 2;
-            entries = realloc(entries, sizeof(char *) * cap);
-            RRC_ASSERT(entries != NULL, "OOM while allocating space for folder entries");
-        }
-
-        char *entry_path = bump_alloc_string(arena, entry->d_name);
-        entries[i] = entry_path;
-        i++;
-    }
-
-    if (i >= MAX_FOLDER_FILES)
-    {
-        RRC_FATAL("Too many files in folder '%s' for Riivolution patch loader! Found %d files, but max is %d", folder_path, i + 1, MAX_FOLDER_FILES);
-    }
-
-    const char **entries_m1 = bump_alloc_string_array(arena, i);
-    memcpy(entries_m1, entries, sizeof(char *) * i);
-
-    free(entries);
-    closedir(dir);
-
-    *out_count = i;
-    return entries_m1;
+void vec_init(struct vec *vec, int capacity, int value_size)
+{
+    vec->data = malloc(value_size * capacity);
+    RRC_ASSERT(vec->data != NULL, "OOM while allocating vec data");
+    vec->value_size = value_size;
+    vec->len = 0;
+    vec->cap = capacity;
 }
 
-// Attempts to replace the previously loaded main DOL of the game with a main.dol replacement
-// from the SD card.
-static struct rrc_result rrc_replace_main_dol(struct rrc_dol *dol, const char *main_dol_replacement_path)
+void *vec_at(struct vec *vec, int index)
 {
-    FILE *main_dol = fopen(main_dol_replacement_path, "r");
-    if (!main_dol)
+    RRC_ASSERT(index >= 0 && index < vec->len, "vec index out of bounds");
+    return (char *)vec->data + (index * vec->value_size);
+}
+
+void vec_push(struct vec *vec, void *value)
+{
+    if (vec->len >= vec->cap)
     {
-        return rrc_result_create_error_errno(errno, "Failed to open main.dol replacement file");
+        int new_cap = vec->cap * 2;
+        if (new_cap <= vec->cap) // Check for overflow
+        {
+            RRC_FATAL("vec capacity overflow");
+        }
+
+        void *new_data = realloc(vec->data, new_cap * vec->value_size);
+        RRC_ASSERT(new_data != NULL, "OOM while reallocating vec data");
+        vec->data = new_data;
+        vec->cap = new_cap;
     }
 
-    int read;
-    char *dol_ptr = (char *)dol;
-    while ((read = fread(dol_ptr, 1, 1024, main_dol)) > 0)
+    vec->len++;
+    void *dest = vec_at(vec, vec->len - 1);
+    memcpy(dest, value, vec->value_size);
+}
+
+void vec_free(struct vec *vec)
+{
+    free(vec->data);
+}
+
+static void _rrc_riivo_handle_file_patch(struct vec *sd_files, struct vec *replacements, u32 *mem1, const char *disc_path, const char *external_path)
+{
+    // TODO: handle main.dol and check if disc_path starts with / or NOT
+
+    // TODO: normalize disc_path and external_path
+
+    struct rrc_riivo_sd_file *sd_files_data = sd_files->data;
+    int entrynum = -1;
+    for (int i = 0; i < sd_files->len; i++)
     {
-        dol_ptr += read;
+        if (strcmp(sd_files_data[i].path, disc_path) == 0)
+        {
+            entrynum = i;
+            break;
+        }
     }
 
-    if (ferror(main_dol))
+    if (entrynum == -1)
     {
-        return rrc_result_create_error_errno(errno, "Failed to read main.dol replacement");
+        // SD file doesn't exist yet, allocate a new entry.
+        entrynum = sd_files->len;
+        const char *external_path_m1 = bump_alloc_string(mem1, external_path);
+
+        // TODO: check if file exists
+
+        struct rrc_riivo_sd_file new_file = {
+            .path = external_path_m1,
+            .file_info = NULL,
+        };
+        vec_push(sd_files, &new_file);
     }
 
-    fclose(main_dol);
+    const char *disc_path_m1 = bump_alloc_string(mem1, disc_path);
+
+    struct rrc_riivo_file_replacement new_replacement = {
+        .disc = disc_path_m1,
+        .entrynum = entrynum,
+    };
+
+    if (replacements->len >= GLOBAL_MAX_FOLDER_FILES)
+    {
+        RRC_FATAL("Too many SD files for Riivolution patch loader! Found %d files, but max is %d", entrynum + 1, GLOBAL_MAX_FOLDER_FILES);
+    }
+    vec_push(replacements, &new_replacement);
+    SYS_Report("File replacement! %s -> %s (entrynum %d)\n", disc_path, external_path, entrynum);
+}
+
+static void _rrc_riivo_combine_paths(const char *left, const char *right, char *out, int out_sz)
+{
+    if (left[0] == '\0')
+    {
+        strncpy(out, right, out_sz);
+    }
+    else if (right[0] == '\0')
+    {
+        strncpy(out, left, out_sz);
+    }
+    else
+    {
+        // TODO: remove slashes at end of left/right
+        snprintf(out, out_sz, "%s/%s", left, right);
+    }
+}
+
+static struct rrc_result _rrc_riivo_handle_folder_patch(struct vec *sd_files,
+                                                        struct vec *replacements,
+                                                        u32 *mem1,
+                                                        const char *disc_path,
+                                                        const char *external_path,
+                                                        bool recursive)
+{
+    DIR *dir = opendir(external_path);
+    if (!dir)
+    {
+        return rrc_result_create_error_errno(errno, "Failed to open folder");
+    }
+
+    int disc_path_len = strlen(disc_path);
+    int external_path_len = strlen(external_path);
+
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL)
+    {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        int d_name_len = strlen(entry->d_name);
+
+        // TODO: verify the sizes are correct
+
+        int disc_path_sz = disc_path_len + d_name_len + 2 /* null terminator + slash */;
+        char *cur_disc_path = malloc(disc_path_sz);
+        _rrc_riivo_combine_paths(disc_path, entry->d_name, cur_disc_path, disc_path_sz);
+
+        int external_path_sz = external_path_len + d_name_len + 2 /* null terminator + slash */;
+        char *cur_external_path = malloc(external_path_sz);
+        _rrc_riivo_combine_paths(external_path, entry->d_name, cur_external_path, external_path_sz);
+
+        if (entry->d_type == DT_REG)
+        {
+            _rrc_riivo_handle_file_patch(sd_files, replacements, mem1, cur_disc_path, cur_external_path);
+        }
+        else if (recursive && entry->d_type == DT_DIR)
+        {
+            struct rrc_result res = _rrc_riivo_handle_folder_patch(sd_files, replacements, mem1, cur_disc_path, cur_external_path, true);
+            if (res.err)
+            {
+                // TODO: free malloc()s.
+                closedir(dir);
+                return res;
+            }
+        }
+
+        free(cur_disc_path);
+        free(cur_external_path);
+    }
+
+    closedir(dir);
     return rrc_result_success;
 }
 
-struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings,
-                                               struct rrc_dol *dol,
-                                               u32 *mem1,
-                                               u32 *mem2,
-                                               struct parse_riivo_output *out)
+struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings, u32 *mem1, u32 *mem2, struct parse_riivo_output *out)
 {
 #define PARSE_REQUIRED_ATTR(node, var, attr)                                                                    \
     const char *var = mxmlElementGetAttr(node, attr);                                                           \
@@ -241,20 +312,10 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
         return rrc_result_create_error_corrupted_rr_xml("missing " attr " attribute on " #node " replacement"); \
     }
 
-    int total_cached_folder_files = 0;
-
     out->loader_pul_dest = NULL;
-
-    u32 mem1_orig = *mem1;
-    // Reserve space for file/folder replacements.
-    *mem1 -= sizeof(struct rrc_riivo_disc_replacement) * MAX_FILE_PATCHES;
-    *mem1 -= sizeof(struct rrc_riivo_disc);
-    struct rrc_riivo_disc *riivo_disc = (void *)*mem1;
-    riivo_disc->count = 0;
-    // Reserve space for memory patches. Note: they don't actually need to be reserved in MEM1,
-    // because it's only shortly needed in patch.c and never again at runtime.
     *mem1 -= sizeof(struct rrc_riivo_memory_patch) * MAX_MEMORY_PATCHES;
     out->mem_patches = (void *)*mem1;
+
     out->mem_patches_count = 0;
 
     // Read the XML to extract all possible options for the entries.
@@ -270,8 +331,11 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
     const char *active_patches[MAX_ENABLED_SETTINGS];
     int active_patches_count = 0;
 
-    // The SD card path to the last-encountered main.dol replacement
-    char main_dol_replacement_path[PATH_MAX] = {0};
+    struct vec sd_files;
+    vec_init(&sd_files, 4, sizeof(struct rrc_riivo_sd_file));
+
+    struct vec replacements;
+    vec_init(&replacements, 4, sizeof(struct rrc_riivo_file_replacement));
 
     mxml_index_t *options_index = mxmlIndexNew(xml_top, "option", NULL);
 
@@ -284,11 +348,6 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
     // Iterate through <patch> elements.
     for (mxml_node_t *cur = mxmlFindElement(xml_top, xml_top, "patch", NULL, NULL, MXML_DESCEND_FIRST); cur != NULL; cur = mxmlGetNextSibling(cur))
     {
-        if (riivo_disc->count >= MAX_FILE_PATCHES)
-        {
-            return rrc_result_create_error_corrupted_rr_xml("Attempted to enable more than " RRC_STRINGIFY(MAX_FILE_PATCHES) " file/folder replacements!");
-        }
-
         if (mxmlGetType(cur) != MXML_ELEMENT)
             continue;
 
@@ -309,139 +368,27 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
         if (!enabled)
             continue;
 
-        // Handle My Stuff separately since they may not have a `disc` attribute.
-        // All current My Stuff music options *do* have this attribute, so it's fine for them to use this (for now, anyway...).
-        // When all is said and done, we MUST be left with only one folder replacement marked as My Stuff, if My Stuff is enabled.
-        // If there are multiple, they will conflict.
-        bool is_rr_mystuff = strcmp(elem_id, RRC_RR_MY_STUFF_PATCH_ID) == 0;
-        bool is_ctgpr_mystuff = strcmp(elem_id, RRC_CTGP_MY_STUFF_PATCH_ID) == 0;
-
-        // Skip music if the My Stuff exclusive option for it is disabled.
-        bool is_rr_music = strcmp(elem_id, RRC_RR_MUSIC_MY_STUFF_PATCH_ID) == 0;
-        bool is_ctgp_music = strcmp(elem_id, RRC_CTGP_MUSIC_MY_STUFF_PATCH_ID) == 0;
-
         mxml_index_t *file_repl_index = mxmlIndexNew(cur, "file", NULL);
         for (mxml_node_t *file = mxmlIndexEnum(file_repl_index); file != NULL; file = mxmlIndexEnum(file_repl_index))
         {
             PARSE_REQUIRED_ATTR(file, disc_path_mxml, "disc");
             PARSE_REQUIRED_ATTR(file, external_path_mxml, "external");
 
-            // Check that the external path exists.
-            if (!rrc_sd_file_exists(external_path_mxml))
-            {
-                // File doesn't exist; don't register it.
-                continue;
-            }
-
-            char *disc_path_m1 = bump_alloc_string(mem1, disc_path_mxml);
-            char *external_path_m1 = bump_alloc_string(mem1, external_path_mxml);
-
-            struct rrc_riivo_disc_replacement *patch_dist = &riivo_disc->replacements[riivo_disc->count];
-            patch_dist->disc = disc_path_m1;
-            patch_dist->external = external_path_m1;
-            patch_dist->type = RRC_RIIVO_FILE_REPLACEMENT;
-            patch_dist->folder_contents = NULL;
-            patch_dist->folder_contents_count = 0;
-            riivo_disc->count++;
+            _rrc_riivo_handle_file_patch(&sd_files, &replacements, mem1, disc_path_mxml, external_path_mxml);
         }
         mxmlIndexDelete(file_repl_index);
 
-        if (!is_rr_mystuff && !is_ctgpr_mystuff)
-        {    
-            mxml_index_t *folder_repl_index = mxmlIndexNew(cur, "folder", NULL);
-            for (mxml_node_t *folder = mxmlIndexEnum(folder_repl_index); folder != NULL; folder = mxmlIndexEnum(folder_repl_index))
-            {
-                PARSE_REQUIRED_ATTR(folder, disc_path_mxml, "disc");
-                PARSE_REQUIRED_ATTR(folder, external_path_mxml, "external");
-
-                rrc_dbg_printf("Processing folder replacement: disc='%s', external='%s'\n", disc_path_mxml, external_path_mxml);
-
-                if (!rrc_sd_folder_exists(external_path_mxml))
-                {
-                    // Folder doesn't exist; don't register it.
-                    continue;
-                }
-
-                char *disc_path_m1 = bump_alloc_string(mem1, disc_path_mxml);
-                char *external_path_m1 = bump_alloc_string(mem1, external_path_mxml);
-
-                int out_count = 0;
-                const char **folder_contents = rrc_riivo_patch_loader_get_entries_in_replaced_folder(mem1, external_path_mxml, &out_count, NULL);
-
-                total_cached_folder_files += out_count;
-                if (total_cached_folder_files >= GLOBAL_MAX_FOLDER_FILES)
-                {
-                    RRC_FATAL("Too many total files cached across all folder replacements for Riivolution patch loader! Found %d files, but max is %d", total_cached_folder_files, GLOBAL_MAX_FOLDER_FILES);
-                }
-
-                if (out_count == 0)
-                {
-                    // The folder exists but is empty, which is a bit suspicious for a folder replacement. Don't register it since it won't actually replace anything.
-                    rrc_dbg_printf("WARNING: folder replacement '%s' is empty!\n", external_path_mxml);
-                    continue;
-                }
-
-                struct rrc_riivo_disc_replacement *patch_dist = &riivo_disc->replacements[riivo_disc->count];
-                patch_dist->disc = disc_path_m1;
-                patch_dist->external = external_path_m1;
-                // We must set the correct type here since My Stuff should take priority.
-                patch_dist->type = (is_rr_music || is_ctgp_music) ? RRC_RIIVO_MY_STUFF_REPLACEMENT : RRC_RIIVO_FOLDER_REPLACEMENT;
-                patch_dist->folder_contents = folder_contents;
-                patch_dist->folder_contents_count = out_count;
-                riivo_disc->count++;
-            }
-            mxmlIndexDelete(folder_repl_index);
-        }
-        else if ((is_rr_mystuff && settings->my_stuff == RRC_SETTINGSFILE_MY_STUFF_RR) || (is_ctgpr_mystuff && settings->my_stuff == RRC_SETTINGSFILE_MY_STUFF_CTGP))
+        mxml_index_t *folder_repl_index = mxmlIndexNew(cur, "folder", NULL);
+        for (mxml_node_t *folder = mxmlIndexEnum(folder_repl_index); folder != NULL; folder = mxmlIndexEnum(folder_repl_index))
         {
-            // Let's get the first entry in this patch just so we can get the external path,
-            // instead of hardcoding it.
-            mxml_index_t *folder_repl_index = mxmlIndexNew(cur, "folder", NULL);
-            mxml_node_t *folder = mxmlIndexEnum(folder_repl_index);
+            PARSE_REQUIRED_ATTR(folder, disc_path_mxml, "disc");
             PARSE_REQUIRED_ATTR(folder, external_path_mxml, "external");
+            const char *recursive_mxml = mxmlElementGetAttr(folder, "recursive");
+            bool recursive = recursive_mxml != NULL && strcmp(recursive_mxml, "true") == 0;
 
-            // Skip the folder replacement if we're currently looking at the wrong patch.
-            if ((is_rr_mystuff && settings->my_stuff != RRC_SETTINGSFILE_MY_STUFF_RR) || (is_ctgpr_mystuff && settings->my_stuff != RRC_SETTINGSFILE_MY_STUFF_CTGP))
-            {
-                continue;
-            }
-
-            if (!rrc_sd_folder_exists(external_path_mxml))
-            {
-                // Folder doesn't exist; don't register it.
-                continue;
-            }
-
-            char *external_path_m1 = bump_alloc_string(mem1, external_path_mxml);
-
-            int out_count = 0;
-            const char **folder_contents = rrc_riivo_patch_loader_get_entries_in_replaced_folder(mem1, external_path_mxml, &out_count, main_dol_replacement_path);
-
-            total_cached_folder_files += out_count;
-            if (total_cached_folder_files >= GLOBAL_MAX_FOLDER_FILES)
-            {
-                RRC_FATAL("Too many total files cached across all folder replacements for Riivolution patch loader! Found %d files, but max is %d", total_cached_folder_files, GLOBAL_MAX_FOLDER_FILES);
-            }
-
-            if (out_count == 0)
-            {
-                // The folder exists but is empty, which is a bit suspicious for a folder replacement. Don't register it since it won't actually replace anything.
-                rrc_dbg_printf("WARNING: folder replacement '%s' is empty!\n", external_path_mxml);
-                continue;
-            }
-
-            struct rrc_riivo_disc_replacement *patch_dist = &riivo_disc->replacements[riivo_disc->count];
-            patch_dist->disc = NULL;
-            patch_dist->external = external_path_m1;
-            patch_dist->type = RRC_RIIVO_MY_STUFF_REPLACEMENT;
-            patch_dist->folder_contents = folder_contents;
-            patch_dist->folder_contents_count = out_count;
-            riivo_disc->count++;
+            _rrc_riivo_handle_folder_patch(&sd_files, &replacements, mem1, disc_path_mxml, external_path_mxml, recursive);
         }
-        else
-        {
-            rrc_dbg_printf("My Stuff is disabled, skipping folder replacements.\n");
-        }
+        mxmlIndexDelete(folder_repl_index);
 
         mxml_index_t *memory_index = mxmlIndexNew(cur, "memory", NULL);
         for (mxml_node_t *memory = mxmlIndexEnum(memory_index); memory != NULL; memory = mxmlIndexEnum(memory_index))
@@ -485,17 +432,21 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
         mxmlIndexDelete(memory_index);
     }
 
-    if (main_dol_replacement_path[0] != '\0')
-    {
-        TRY(rrc_replace_main_dol(dol, main_dol_replacement_path));
-    }
+    // TODO: copy vec data into MEM1 here and replace the NULLs below
 
     // This address is a `static` in the runtime-ext dol that holds a pointer to the replacements, defined in the linker script.
-    *((struct rrc_riivo_disc **)(RRC_RIIVO_DISC_PTR)) = riivo_disc;
-    rrc_invalidate_cache((void *)*mem1, mem1_orig - *mem1);
+    struct rrc_riivo_disc *riivo_disc = (struct rrc_riivo_disc *)(RRC_RIIVO_DISC_PTR);
+    riivo_disc->sd_files = NULL;
+    riivo_disc->replacements = NULL;
+    riivo_disc->replacements_count = replacements.len;
 
     mxmlDelete(xml_top);
     fclose(xml_file);
+    vec_free(&sd_files);
+    vec_free(&replacements);
+
+    while (1)
+        rrc_usleep(10000000);
 
     return rrc_result_success;
 #undef REQUIRE_ATTR
