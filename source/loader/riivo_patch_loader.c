@@ -186,8 +186,6 @@ static void _rrc_riivo_handle_file_patch(struct vec *sd_files, struct vec *repla
 {
     // TODO: handle main.dol and check if disc_path starts with / or NOT
 
-    // TODO: normalize disc_path and external_path
-
     struct rrc_riivo_sd_file *sd_files_data = sd_files->data;
     int entrynum = -1;
     for (int i = 0; i < sd_files->len; i++)
@@ -229,6 +227,12 @@ static void _rrc_riivo_handle_file_patch(struct vec *sd_files, struct vec *repla
     SYS_Report("File replacement! %s -> %s (entrynum %d)\n", disc_path, external_path, entrynum);
 }
 
+static void strlower(char *str)
+{
+    for (int i = 0; str[i]; i++)
+        str[i] = tolower(str[i]);
+}
+
 static void _rrc_riivo_combine_paths(const char *left, const char *right, char *out, int out_sz)
 {
     if (left[0] == '\0')
@@ -241,8 +245,17 @@ static void _rrc_riivo_combine_paths(const char *left, const char *right, char *
     }
     else
     {
-        // TODO: remove slashes at end of left/right
-        snprintf(out, out_sz, "%s/%s", left, right);
+        // Combine left + right with a slash in between.
+        // It's possible that left ends with a '/' and/or right starts with a '/', so this needs to be handled to avoid double slashes.
+
+        int left_ends_with_slash = left[strlen(left) - 1] == '/';
+        if (right[0] == '/')
+        {
+            right++;
+        }
+
+        snprintf(out, out_sz, "%s%s%s", left, left_ends_with_slash ? "" : "/", right);
+        strlower(out);
     }
 }
 
@@ -434,19 +447,28 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
 
     // TODO: copy vec data into MEM1 here and replace the NULLs below
 
+    *mem1 -= sizeof(struct rrc_riivo_sd_file) * sd_files.len;
+    struct rrc_riivo_sd_file *mem1_sd_files = (struct rrc_riivo_sd_file *)*mem1;
+    memcpy(mem1_sd_files, sd_files.data, sizeof(struct rrc_riivo_sd_file) * sd_files.len);
+
+    SYS_Report("Allocated %d bytes for SD files to %x\n", (int)(sizeof(struct rrc_riivo_sd_file) * sd_files.len), *mem1);
+
+    *mem1 -= sizeof(struct rrc_riivo_file_replacement) * replacements.len;
+    struct rrc_riivo_file_replacement *mem1_replacements = (struct rrc_riivo_file_replacement *)*mem1;
+    memcpy(mem1_replacements, replacements.data, sizeof(struct rrc_riivo_file_replacement) * replacements.len);
+
+    SYS_Report("Allocated %d bytes for file replacements to %x\n", (int)(sizeof(struct rrc_riivo_file_replacement) * replacements.len), *mem1);
+
     // This address is a `static` in the runtime-ext dol that holds a pointer to the replacements, defined in the linker script.
     struct rrc_riivo_disc *riivo_disc = (struct rrc_riivo_disc *)(RRC_RIIVO_DISC_PTR);
-    riivo_disc->sd_files = NULL;
-    riivo_disc->replacements = NULL;
+    riivo_disc->sd_files = mem1_sd_files;
+    riivo_disc->replacements = mem1_replacements;
     riivo_disc->replacements_count = replacements.len;
 
     mxmlDelete(xml_top);
     fclose(xml_file);
     vec_free(&sd_files);
     vec_free(&replacements);
-
-    while (1)
-        rrc_usleep(10000000);
 
     return rrc_result_success;
 #undef REQUIRE_ATTR
