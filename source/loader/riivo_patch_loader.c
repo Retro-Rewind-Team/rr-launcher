@@ -131,7 +131,13 @@ static struct rrc_result rrc_patch_loader_append_patches_for_option(
     return rrc_result_create_error_corrupted_rr_xml("option not found in xml");
 }
 
-// Only need to track immediate files in this folder.
+/**
+ * Collects all *direct* files (does not visit subdirectories) in the given folder and returns them.
+ *
+ * `main_dol_replacement_path` may be NULL, in which case main.dol is ignored,
+ * but if it's non-null, the external SD path will be copied into it
+ * (this is a slight hack that will be cleaned up as part of the replacement rework).
+ */
 const char **rrc_riivo_patch_loader_get_entries_in_replaced_folder(u32 *arena,
                                                                    const char *folder_path,
                                                                    int *out_count,
@@ -158,8 +164,11 @@ const char **rrc_riivo_patch_loader_get_entries_in_replaced_folder(u32 *arena,
 
         if (strcmp(entry->d_name, "main.dol") == 0)
         {
-            snprintf(main_dol_replacement_path, PATH_MAX, "%s/main.dol", folder_path);
-            continue; // No need to store this entry as main.dol is never needed at runtime.
+            if (main_dol_replacement_path != NULL)
+            {
+                snprintf(main_dol_replacement_path, PATH_MAX, "%s/main.dol", folder_path);
+            }
+            continue; // No need to store this entry in any case as main.dol is never replaced at runtime.
         }
 
         if (i >= cap)
@@ -353,7 +362,7 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
                 char *external_path_m1 = bump_alloc_string(mem1, external_path_mxml);
 
                 int out_count = 0;
-                const char **folder_contents = rrc_riivo_patch_loader_get_entries_in_replaced_folder(mem1, external_path_mxml, &out_count, main_dol_replacement_path);
+                const char **folder_contents = rrc_riivo_patch_loader_get_entries_in_replaced_folder(mem1, external_path_mxml, &out_count, NULL);
 
                 total_cached_folder_files += out_count;
                 if (total_cached_folder_files >= GLOBAL_MAX_FOLDER_FILES)
