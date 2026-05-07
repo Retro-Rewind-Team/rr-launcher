@@ -131,8 +131,17 @@ static struct rrc_result rrc_patch_loader_append_patches_for_option(
     return rrc_result_create_error_corrupted_rr_xml("option not found in xml");
 }
 
-// Only need to track immediate files in this folder.
-const char **rrc_riivo_patch_loader_get_entries_in_replaced_folder(u32 *arena, const char *folder_path, int *out_count)
+/**
+ * Collects all *direct* files (does not visit subdirectories) in the given folder and returns them.
+ *
+ * `main_dol_replacement_path` may be NULL, in which case main.dol is ignored,
+ * but if it's non-null, the external SD path will be copied into it
+ * (this is a slight hack that will be cleaned up as part of the replacement rework).
+ */
+const char **rrc_riivo_patch_loader_get_entries_in_replaced_folder(u32 *arena,
+                                                                   const char *folder_path,
+                                                                   int *out_count,
+                                                                   char *main_dol_replacement_path)
 {
     DIR *dir = opendir(folder_path);
     if (!dir)
@@ -142,44 +151,84 @@ const char **rrc_riivo_patch_loader_get_entries_in_replaced_folder(u32 *arena, c
         return NULL;
     }
 
-    // Count entries first, so we only allocate space for the actual entries. Inefficient, but this is why we do it here and not in-game!
-    int count = 0;
+    int cap = 4;
+    const char **entries = malloc(sizeof(char *) * cap);
+    RRC_ASSERT(entries != NULL, "OOM while allocating space for folder entries");
+
     struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL)
-    {
-        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0 || entry->d_type != DT_REG)
-            continue;
-
-        count++;
-    }
-
-    if (count >= MAX_FOLDER_FILES)
-    {
-        RRC_FATAL("Too many files in folder '%s' for Riivolution patch loader! Found %d files, but max is %d", folder_path, count + 1, MAX_FOLDER_FILES);
-    }
-
-    // Reset directory stream to read entries again for storing them.
-    rewinddir(dir);
-
-    const char **entries = bump_alloc_string_array(arena, count);
     int i = 0;
     while ((entry = readdir(dir)) != NULL)
     {
         if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0 || entry->d_type != DT_REG)
             continue;
 
+        if (strcmp(entry->d_name, "main.dol") == 0)
+        {
+            if (main_dol_replacement_path != NULL)
+            {
+                snprintf(main_dol_replacement_path, PATH_MAX, "%s/main.dol", folder_path);
+            }
+            continue; // No need to store this entry in any case as main.dol is never replaced at runtime.
+        }
+
+        if (i >= cap)
+        {
+            cap *= 2;
+            entries = realloc(entries, sizeof(char *) * cap);
+            RRC_ASSERT(entries != NULL, "OOM while allocating space for folder entries");
+        }
+
         char *entry_path = bump_alloc_string(arena, entry->d_name);
         entries[i] = entry_path;
         i++;
     }
 
+    if (i >= MAX_FOLDER_FILES)
+    {
+        RRC_FATAL("Too many files in folder '%s' for Riivolution patch loader! Found %d files, but max is %d", folder_path, i + 1, MAX_FOLDER_FILES);
+    }
+
+    const char **entries_m1 = bump_alloc_string_array(arena, i);
+    memcpy(entries_m1, entries, sizeof(char *) * i);
+
+    free(entries);
     closedir(dir);
 
-    *out_count = count;
-    return entries;
+    *out_count = i;
+    return entries_m1;
 }
 
-struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings, u32 *mem1, u32 *mem2, struct parse_riivo_output *out)
+// Attempts to replace the previously loaded main DOL of the game with a main.dol replacement
+// from the SD card.
+static struct rrc_result rrc_replace_main_dol(struct rrc_dol *dol, const char *main_dol_replacement_path)
+{
+    FILE *main_dol = fopen(main_dol_replacement_path, "r");
+    if (!main_dol)
+    {
+        return rrc_result_create_error_errno(errno, "Failed to open main.dol replacement file");
+    }
+
+    int read;
+    char *dol_ptr = (char *)dol;
+    while ((read = fread(dol_ptr, 1, 1024, main_dol)) > 0)
+    {
+        dol_ptr += read;
+    }
+
+    if (ferror(main_dol))
+    {
+        return rrc_result_create_error_errno(errno, "Failed to read main.dol replacement");
+    }
+
+    fclose(main_dol);
+    return rrc_result_success;
+}
+
+struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings,
+                                               struct rrc_dol *dol,
+                                               u32 *mem1,
+                                               u32 *mem2,
+                                               struct parse_riivo_output *out)
 {
 #define PARSE_REQUIRED_ATTR(node, var, attr)                                                                    \
     const char *var = mxmlElementGetAttr(node, attr);                                                           \
@@ -216,6 +265,9 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
 
     const char *active_patches[MAX_ENABLED_SETTINGS];
     int active_patches_count = 0;
+
+    // The SD card path to the last-encountered main.dol replacement
+    char main_dol_replacement_path[PATH_MAX] = {0};
 
     mxml_index_t *options_index = mxmlIndexNew(xml_top, "option", NULL);
 
@@ -310,7 +362,7 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
                 char *external_path_m1 = bump_alloc_string(mem1, external_path_mxml);
 
                 int out_count = 0;
-                const char **folder_contents = rrc_riivo_patch_loader_get_entries_in_replaced_folder(mem1, external_path_mxml, &out_count);
+                const char **folder_contents = rrc_riivo_patch_loader_get_entries_in_replaced_folder(mem1, external_path_mxml, &out_count, NULL);
 
                 total_cached_folder_files += out_count;
                 if (total_cached_folder_files >= GLOBAL_MAX_FOLDER_FILES)
@@ -359,7 +411,7 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
             char *external_path_m1 = bump_alloc_string(mem1, external_path_mxml);
 
             int out_count = 0;
-            const char **folder_contents = rrc_riivo_patch_loader_get_entries_in_replaced_folder(mem1, external_path_mxml, &out_count);
+            const char **folder_contents = rrc_riivo_patch_loader_get_entries_in_replaced_folder(mem1, external_path_mxml, &out_count, main_dol_replacement_path);
 
             total_cached_folder_files += out_count;
             if (total_cached_folder_files >= GLOBAL_MAX_FOLDER_FILES)
@@ -424,6 +476,11 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
             }
         }
         mxmlIndexDelete(memory_index);
+    }
+
+    if (main_dol_replacement_path[0] != '\0')
+    {
+        TRY(rrc_replace_main_dol(dol, main_dol_replacement_path));
     }
 
     // This address is a `static` in the runtime-ext dol that holds a pointer to the replacements, defined in the linker script.
