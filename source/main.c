@@ -258,7 +258,7 @@ int main(int argc, char **argv)
         {
             rrc_result_error_check_error_normal(update_res, xfb);
         }
-        else
+        else if(any_updates)
         {
             char status_message[64];
             snprintf(status_message, sizeof(status_message), "%d updates were installed.", update_count);

@@ -613,6 +613,8 @@ struct rrc_result rrc_update_do_updates(void *xfb, int *count, bool *updates_ins
         {
             return rrc_result_success;
         }
+    } else {
+        return rrc_result_success;
     }
 
     rrc_con_update("Get Files to Remove", 30);
@@ -666,5 +668,6 @@ struct rrc_result rrc_update_do_updates(void *xfb, int *count, bool *updates_ins
     TRY(rrc_update_do_updates_with_state(&state));
 
     *updates_installed = true;
+
     return rrc_result_success;
 }
