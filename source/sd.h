@@ -20,9 +20,10 @@
 #ifndef RRC_SD_H
 #define RRC_SD_H
 
+#include <dir.h>
 #include "result.h"
 
-#define RRC_SD_TEST_FILE "/RetroRewindChannel/.sdtest"
+#define RRC_SD_TEST_FILE "/" RRC_RETRO_REWIND_CHANNEL_DIR "/.sdtest"
 
 /*
     Initialises and tests the SD card slot.

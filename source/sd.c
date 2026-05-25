@@ -47,6 +47,11 @@ struct rrc_result rrc_sd_init()
         return rrc_result_create_error_sdcard(EIO, "Failed to set SD card root");
     }
 
+    if (!rrc_sd_folder_exists("/" RRC_RETRO_REWIND_CHANNEL_DIR))
+    {
+        return rrc_result_create_error_sdcard(EIO, "sd:/" RRC_RETRO_REWIND_CHANNEL_DIR " was not found.");
+    }
+
     FILE *file = fopen(RRC_SD_TEST_FILE, "w+");
     if (!file)
     {
@@ -102,10 +107,9 @@ bool rrc_sd_file_exists(const char *path)
 
 bool rrc_sd_folder_exists(const char *path)
 {
-    DIR *dir = opendir(path);
-    if (dir != NULL)
+    struct stat st;
+    if (stat(path, &st) == 0 && S_ISDIR(st.st_mode))
     {
-        closedir(dir);
         return true;
     }
     else

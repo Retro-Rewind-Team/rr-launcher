@@ -94,18 +94,6 @@ int main(int argc, char **argv)
 
     errno = 0;
 
-    DIR *dir = opendir("sd:/" RRC_RETRO_REWIND_CHANNEL_DIR);
-    if (dir != NULL)
-    {
-        closedir(dir);
-    }
-    else
-    {
-        // ???
-        struct rrc_result err = rrc_result_create_error_errno(errno, "Failed to open sd:/" RRC_RETRO_REWIND_CHANNEL_DIR);
-        rrc_result_error_check_error_fatal(err);
-    }
-
     rrc_con_update("Initialise controllers", 0);
     res = PAD_Init();
     RRC_ASSERTEQ(res, 1, "PAD_Init");
