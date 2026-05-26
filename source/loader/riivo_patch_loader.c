@@ -39,12 +39,6 @@ static char *bump_alloc_string(u32 *arena, const char *src)
     return dest;
 }
 
-static const char **bump_alloc_string_array(u32 *arena, int count)
-{
-    *arena -= sizeof(char *) * count;
-    return (const char **)*arena;
-}
-
 bool should_register_patch_mystuff_aware(bool is_rr_mystuff, bool is_ctgpr_mystuff, bool is_rr_music_mystuff, bool is_ctgp_music_mystuff, int my_stuff_setting)
 {
     if (!is_rr_mystuff && !is_ctgpr_mystuff && !is_rr_music_mystuff && !is_ctgp_music_mystuff)
@@ -182,15 +176,20 @@ void vec_free(struct vec *vec)
     free(vec->data);
 }
 
-static void _rrc_riivo_handle_file_patch(struct vec *sd_files, struct vec *replacements, u32 *mem1, const char *disc_path, const char *external_path)
+static void _rrc_riivo_handle_file_patch(struct vec *sd_files,
+                                         struct vec *replacements,
+                                         struct vec *filename_replacements,
+                                         u32 *mem1,
+                                         const char *disc_path,
+                                         const char *external_path)
 {
-    // TODO: handle main.dol and check if disc_path starts with / or NOT
+    // TODO: handle main.dol
 
     struct rrc_riivo_sd_file *sd_files_data = sd_files->data;
     int entrynum = -1;
     for (int i = 0; i < sd_files->len; i++)
     {
-        if (strcmp(sd_files_data[i].path, disc_path) == 0)
+        if (strcmp(sd_files_data[i].path, external_path) == 0)
         {
             entrynum = i;
             break;
@@ -199,11 +198,20 @@ static void _rrc_riivo_handle_file_patch(struct vec *sd_files, struct vec *repla
 
     if (entrynum == -1)
     {
-        // SD file doesn't exist yet, allocate a new entry.
+        FILE *f = fopen(external_path, "r");
+        if (f)
+        {
+            fclose(f);
+        }
+        else
+        {
+            // File doesn't exist on the SD card.
+            return;
+        }
+
+        // SD file doesn't exist in the list yet, allocate a new entry.
         entrynum = sd_files->len;
         const char *external_path_m1 = bump_alloc_string(mem1, external_path);
-
-        // TODO: check if file exists
 
         struct rrc_riivo_sd_file new_file = {
             .path = external_path_m1,
@@ -223,8 +231,20 @@ static void _rrc_riivo_handle_file_patch(struct vec *sd_files, struct vec *repla
     {
         RRC_FATAL("Too many SD files for Riivolution patch loader! Found %d files, but max is %d", entrynum + 1, GLOBAL_MAX_FOLDER_FILES);
     }
-    vec_push(replacements, &new_replacement);
-    SYS_Report("File replacement! %s -> %s (entrynum %d)\n", disc_path, external_path, entrynum);
+
+    SYS_Report("Registering file replacement: %s -> %s (entrynum %d %s)\n", disc_path, external_path, entrynum, ((struct rrc_riivo_sd_file *)vec_at(sd_files, entrynum))->path);
+
+    if (disc_path[0] == '/')
+    {
+        // TODO: check if there's already a replacement for this path and if yes, remove the other one.
+        vec_push(replacements, &new_replacement);
+    }
+    else
+    {
+        // TODO: check if there's already a replacement for this path and if yes, remove the other one.
+        // Filename search replacement.
+        vec_push(filename_replacements, &new_replacement);
+    }
 }
 
 static void strlower(char *str)
@@ -261,6 +281,7 @@ static void _rrc_riivo_combine_paths(const char *left, const char *right, char *
 
 static struct rrc_result _rrc_riivo_handle_folder_patch(struct vec *sd_files,
                                                         struct vec *replacements,
+                                                        struct vec *filename_replacements,
                                                         u32 *mem1,
                                                         const char *disc_path,
                                                         const char *external_path,
@@ -295,11 +316,11 @@ static struct rrc_result _rrc_riivo_handle_folder_patch(struct vec *sd_files,
 
         if (entry->d_type == DT_REG)
         {
-            _rrc_riivo_handle_file_patch(sd_files, replacements, mem1, cur_disc_path, cur_external_path);
+            _rrc_riivo_handle_file_patch(sd_files, replacements, filename_replacements, mem1, cur_disc_path, cur_external_path);
         }
         else if (recursive && entry->d_type == DT_DIR)
         {
-            struct rrc_result res = _rrc_riivo_handle_folder_patch(sd_files, replacements, mem1, cur_disc_path, cur_external_path, true);
+            struct rrc_result res = _rrc_riivo_handle_folder_patch(sd_files, replacements, filename_replacements, mem1, cur_disc_path, cur_external_path, true);
             if (res.err)
             {
                 // TODO: free malloc()s.
@@ -350,6 +371,9 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
     struct vec replacements;
     vec_init(&replacements, 4, sizeof(struct rrc_riivo_file_replacement));
 
+    struct vec filename_replacements;
+    vec_init(&filename_replacements, 4, sizeof(struct rrc_riivo_file_replacement));
+
     mxml_index_t *options_index = mxmlIndexNew(xml_top, "option", NULL);
 
     TRY(rrc_patch_loader_append_patches_for_option(xml_top, options_index, "My Stuff", settings->my_stuff, active_patches, &active_patches_count));
@@ -387,19 +411,24 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
             PARSE_REQUIRED_ATTR(file, disc_path_mxml, "disc");
             PARSE_REQUIRED_ATTR(file, external_path_mxml, "external");
 
-            _rrc_riivo_handle_file_patch(&sd_files, &replacements, mem1, disc_path_mxml, external_path_mxml);
+            _rrc_riivo_handle_file_patch(&sd_files, &replacements, &filename_replacements, mem1, disc_path_mxml, external_path_mxml);
         }
         mxmlIndexDelete(file_repl_index);
 
         mxml_index_t *folder_repl_index = mxmlIndexNew(cur, "folder", NULL);
         for (mxml_node_t *folder = mxmlIndexEnum(folder_repl_index); folder != NULL; folder = mxmlIndexEnum(folder_repl_index))
         {
-            PARSE_REQUIRED_ATTR(folder, disc_path_mxml, "disc");
+            const char *disc_path_mxml = mxmlElementGetAttr(folder, "disc");
+            if (!disc_path_mxml)
+            {
+                disc_path_mxml = "";
+            }
+
             PARSE_REQUIRED_ATTR(folder, external_path_mxml, "external");
             const char *recursive_mxml = mxmlElementGetAttr(folder, "recursive");
             bool recursive = recursive_mxml != NULL && strcmp(recursive_mxml, "true") == 0;
 
-            _rrc_riivo_handle_folder_patch(&sd_files, &replacements, mem1, disc_path_mxml, external_path_mxml, recursive);
+            _rrc_riivo_handle_folder_patch(&sd_files, &replacements, &filename_replacements, mem1, disc_path_mxml, external_path_mxml, recursive);
         }
         mxmlIndexDelete(folder_repl_index);
 
@@ -457,19 +486,23 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
     struct rrc_riivo_file_replacement *mem1_replacements = (struct rrc_riivo_file_replacement *)*mem1;
     memcpy(mem1_replacements, replacements.data, sizeof(struct rrc_riivo_file_replacement) * replacements.len);
 
-    SYS_Report("Allocated %d bytes for file replacements to %x\n", (int)(sizeof(struct rrc_riivo_file_replacement) * replacements.len), *mem1);
+    *mem1 -= sizeof(struct rrc_riivo_file_replacement) * filename_replacements.len;
+    struct rrc_riivo_file_replacement *mem1_filename_replacements = (struct rrc_riivo_file_replacement *)*mem1;
+    memcpy(mem1_filename_replacements, filename_replacements.data, sizeof(struct rrc_riivo_file_replacement) * filename_replacements.len);
 
     // This address is a `static` in the runtime-ext dol that holds a pointer to the replacements, defined in the linker script.
     struct rrc_riivo_disc *riivo_disc = (struct rrc_riivo_disc *)(RRC_RIIVO_DISC_PTR);
     riivo_disc->sd_files = mem1_sd_files;
     riivo_disc->replacements = mem1_replacements;
     riivo_disc->replacements_count = replacements.len;
+    riivo_disc->filename_replacements = mem1_filename_replacements;
+    riivo_disc->filename_replacements_count = filename_replacements.len;
 
     mxmlDelete(xml_top);
     fclose(xml_file);
     vec_free(&sd_files);
     vec_free(&replacements);
-
+    vec_free(&filename_replacements);
     return rrc_result_success;
 #undef REQUIRE_ATTR
 }

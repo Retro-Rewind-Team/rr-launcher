@@ -144,6 +144,29 @@ static bool rte_dvd_resolve_path_to_entry_num(const char *filename, s32 *entry_n
 {
     rrc_rt_sd_init();
 
+    for (int i = riivo_disc.filename_replacements_count - 1; i >= 0; i--)
+    {
+        const struct rrc_riivo_file_replacement *replacement = &riivo_disc.filename_replacements[i];
+        const char *filename_segment = strrchr(filename, '/');
+        if (filename_segment)
+        {
+            filename_segment++; // Skip the '/'
+        }
+        else
+        {
+            filename_segment = filename;
+        }
+        RTE_DBG("Checking filename replacement: '%s' == '%s'\n", replacement->disc, filename_segment);
+
+        if (strieq(replacement->disc, filename_segment))
+        {
+            // We already checked that the external file exists when we registered the replacement.
+            RTE_DBG("Found a filename replacement! %d (%s -> %s)\n", i, replacement->disc, riivo_disc.sd_files[replacement->entrynum].path);
+            *entry_num = replacement->entrynum;
+            return true;
+        }
+    }
+
     for (int i = riivo_disc.replacements_count - 1; i >= 0; i--)
     {
         const struct rrc_riivo_file_replacement *replacement = &riivo_disc.replacements[i];
@@ -163,7 +186,7 @@ static bool rte_dvd_resolve_path_to_entry_num(const char *filename, s32 *entry_n
         if (strieq(disc_path, filename))
         {
             // We already checked that the external file exists when we registered the replacement.
-            RTE_DBG("Found a file replacement! %d (%s)\n", i, disc_path);
+            RTE_DBG("Found a file replacement! %d (%s -> %s)\n", i, disc_path, riivo_disc.sd_files[replacement->entrynum].path);
             *entry_num = replacement->entrynum;
             return true;
         }

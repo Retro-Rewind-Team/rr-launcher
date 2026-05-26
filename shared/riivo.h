@@ -44,6 +44,8 @@ struct rrc_riivo_file_replacement
 struct rrc_riivo_disc
 {
     struct rrc_riivo_sd_file *sd_files;
+    int filename_replacements_count;
+    struct rrc_riivo_file_replacement *filename_replacements;
     int replacements_count;
     struct rrc_riivo_file_replacement *replacements;
 };
