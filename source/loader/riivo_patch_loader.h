@@ -66,10 +66,6 @@ struct parse_riivo_output
  * <memory> patches are also parsed.
  * The passed `dol` is overwritten if a main.dol replacement is encountered.
  */
-struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings,
-                                               struct rrc_dol *dol,
-                                               u32 *mem1,
-                                               u32 *mem2,
-                                               struct parse_riivo_output *out);
+struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings, u32 *mem1, u32 *mem2, struct rrc_dol *dol, struct parse_riivo_output *out);
 
 #endif

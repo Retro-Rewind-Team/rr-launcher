@@ -180,10 +180,14 @@ static void _rrc_riivo_handle_file_patch(struct vec *sd_files,
                                          struct vec *replacements,
                                          struct vec *filename_replacements,
                                          u32 *mem1,
+                                         char **main_dol_path,
                                          const char *disc_path,
                                          const char *external_path)
 {
-    // TODO: handle main.dol
+    if (strcmp(disc_path, "main.dol") == 0)
+    {
+        *main_dol_path = strdup(external_path);
+    }
 
     struct rrc_riivo_sd_file *sd_files_data = sd_files->data;
     int entrynum = -1;
@@ -283,6 +287,7 @@ static struct rrc_result _rrc_riivo_handle_folder_patch(struct vec *sd_files,
                                                         struct vec *replacements,
                                                         struct vec *filename_replacements,
                                                         u32 *mem1,
+                                                        char **main_dol_path,
                                                         const char *disc_path,
                                                         const char *external_path,
                                                         bool recursive)
@@ -316,11 +321,11 @@ static struct rrc_result _rrc_riivo_handle_folder_patch(struct vec *sd_files,
 
         if (entry->d_type == DT_REG)
         {
-            _rrc_riivo_handle_file_patch(sd_files, replacements, filename_replacements, mem1, cur_disc_path, cur_external_path);
+            _rrc_riivo_handle_file_patch(sd_files, replacements, filename_replacements, mem1, main_dol_path, cur_disc_path, cur_external_path);
         }
         else if (recursive && entry->d_type == DT_DIR)
         {
-            struct rrc_result res = _rrc_riivo_handle_folder_patch(sd_files, replacements, filename_replacements, mem1, cur_disc_path, cur_external_path, true);
+            struct rrc_result res = _rrc_riivo_handle_folder_patch(sd_files, replacements, filename_replacements, mem1, main_dol_path, cur_disc_path, cur_external_path, true);
             if (res.err)
             {
                 // TODO: free malloc()s.
@@ -337,7 +342,33 @@ static struct rrc_result _rrc_riivo_handle_folder_patch(struct vec *sd_files,
     return rrc_result_success;
 }
 
-struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings, u32 *mem1, u32 *mem2, struct parse_riivo_output *out)
+// Attempts to replace the previously loaded main DOL of the game with a main.dol replacement
+// from the SD card.
+static struct rrc_result rrc_replace_main_dol(struct rrc_dol *dol, const char *main_dol_replacement_path)
+{
+    FILE *main_dol = fopen(main_dol_replacement_path, "r");
+    if (!main_dol)
+    {
+        return rrc_result_create_error_errno(errno, "Failed to open main.dol replacement file");
+    }
+
+    int read;
+    char *dol_ptr = (char *)dol;
+    while ((read = fread(dol_ptr, 1, 1024, main_dol)) > 0)
+    {
+        dol_ptr += read;
+    }
+
+    if (ferror(main_dol))
+    {
+        return rrc_result_create_error_errno(errno, "Failed to read main.dol replacement");
+    }
+
+    fclose(main_dol);
+    return rrc_result_success;
+}
+
+struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings, u32 *mem1, u32 *mem2, struct rrc_dol *dol, struct parse_riivo_output *out)
 {
 #define PARSE_REQUIRED_ATTR(node, var, attr)                                                                    \
     const char *var = mxmlElementGetAttr(node, attr);                                                           \
@@ -349,7 +380,6 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
     out->loader_pul_dest = NULL;
     *mem1 -= sizeof(struct rrc_riivo_memory_patch) * MAX_MEMORY_PATCHES;
     out->mem_patches = (void *)*mem1;
-
     out->mem_patches_count = 0;
 
     // Read the XML to extract all possible options for the entries.
@@ -364,6 +394,8 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
 
     const char *active_patches[MAX_ENABLED_SETTINGS];
     int active_patches_count = 0;
+
+    char *main_dol_path = NULL;
 
     struct vec sd_files;
     vec_init(&sd_files, 4, sizeof(struct rrc_riivo_sd_file));
@@ -411,7 +443,7 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
             PARSE_REQUIRED_ATTR(file, disc_path_mxml, "disc");
             PARSE_REQUIRED_ATTR(file, external_path_mxml, "external");
 
-            _rrc_riivo_handle_file_patch(&sd_files, &replacements, &filename_replacements, mem1, disc_path_mxml, external_path_mxml);
+            _rrc_riivo_handle_file_patch(&sd_files, &replacements, &filename_replacements, mem1, &main_dol_path, disc_path_mxml, external_path_mxml);
         }
         mxmlIndexDelete(file_repl_index);
 
@@ -428,7 +460,7 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
             const char *recursive_mxml = mxmlElementGetAttr(folder, "recursive");
             bool recursive = recursive_mxml != NULL && strcmp(recursive_mxml, "true") == 0;
 
-            _rrc_riivo_handle_folder_patch(&sd_files, &replacements, &filename_replacements, mem1, disc_path_mxml, external_path_mxml, recursive);
+            _rrc_riivo_handle_folder_patch(&sd_files, &replacements, &filename_replacements, mem1, &main_dol_path, disc_path_mxml, external_path_mxml, recursive);
         }
         mxmlIndexDelete(folder_repl_index);
 
@@ -472,6 +504,12 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
             }
         }
         mxmlIndexDelete(memory_index);
+    }
+
+    if (main_dol_path != NULL)
+    {
+        rrc_replace_main_dol(dol, main_dol_path);
+        free(main_dol_path);
     }
 
     // TODO: copy vec data into MEM1 here and replace the NULLs below
