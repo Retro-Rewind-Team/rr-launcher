@@ -37,6 +37,8 @@ struct rrc_riivo_file_replacement
 {
     /* Disc-path that should be replaced */
     const char *disc;
+    /* Hash of the file */
+    u32 hash;
     /* Index into `rrc_riivo_sd_file[]` */
     int entrynum;
 };

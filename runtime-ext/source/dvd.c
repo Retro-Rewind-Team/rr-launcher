@@ -33,6 +33,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <dir.h>
+#include <hash.h>
 
 /**
  * Contains pointers to the file replacements and SD file entries.
@@ -136,6 +137,72 @@ bool strieq(const char *a, const char *b)
 }
 
 /**
+ * Searches for a file replacement by the hash of the normalized disc path.
+ * Normalized here means that leading slashes need to be removed and the path is lowercased.
+ *
+ * **NOTE** that due to hash collision, the returned int may not immediately be the correct replacement:
+ * the caller needs to walk forwards from the returned index as long as the hash still matches and compare the disc_path.
+ */
+static int rte_dvd_search_replacement_by_hash(u32 hash, struct rrc_riivo_file_replacement *replacements, int replacements_len)
+{
+    // Replacements are sorted by their hash, so we can do a binary search here.
+    int start = 0, end = replacements_len;
+
+    while (start < end)
+    {
+        int mid = (start + end) / 2;
+        u32 mid_hash = replacements[mid].hash;
+        if (mid_hash == hash)
+        {
+            // We have a match we can return.
+            //
+            // Edge case: if we have multiple replacements with the same hash, return the index of the first one (`mid` may be in the middle of multiple entries with the same hash).
+            // Consider for example the list: [1 2 2 2 3]; if we land...
+            //                                     ^ ...here, then the caller would need to check backwards and forwards for the correct one.
+            // So instead, we walk backwards to the first same hash so the caller only needs to check forwards.
+            while (mid > 0 && replacements[mid - 1].hash == hash)
+            {
+                mid--;
+            }
+
+            return mid;
+        }
+        else if (mid_hash < hash)
+        {
+            start = mid + 1;
+        }
+        else
+        {
+            end = mid;
+        }
+    }
+    return -1;
+}
+
+/**
+ * Searches for the matching replacement in the given replacements array. This takes into account hash collisions.
+ */
+static bool rte_dvd_search_replacement(u32 hash, const char *filename, struct rrc_riivo_file_replacement *replacements, int replacements_len, s32 *entry_num)
+{
+    int index = rte_dvd_search_replacement_by_hash(hash, riivo_disc.replacements, riivo_disc.replacements_count);
+    if (index != -1)
+    {
+        // We found a replacement by hash. Now find the correct one by comparing paths.
+        for (int i = index; i < riivo_disc.replacements_count && riivo_disc.replacements[i].hash == hash; i++)
+        {
+            const struct rrc_riivo_file_replacement *replacement = &riivo_disc.replacements[i];
+            if (strieq(replacement->disc, filename))
+            {
+                RTE_DBG("Found a file replacement! %d (%s -> %s)\n", i, replacement->disc, riivo_disc.sd_files[replacement->entrynum].path);
+                *entry_num = replacement->entrynum;
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/**
  * Attempts to resolve a DVD path to an entrynum, based on the riivo file and folder replacements.
  * Returns true and writes the entrynum to `entry_num` if a replacement was found,
  * otherwise returns false.
@@ -144,52 +211,33 @@ static bool rte_dvd_resolve_path_to_entry_num(const char *filename, s32 *entry_n
 {
     rrc_rt_sd_init();
 
-    for (int i = riivo_disc.filename_replacements_count - 1; i >= 0; i--)
+    if (filename[0] == '/')
     {
-        const struct rrc_riivo_file_replacement *replacement = &riivo_disc.filename_replacements[i];
-        const char *filename_segment = strrchr(filename, '/');
-        if (filename_segment)
-        {
-            filename_segment++; // Skip the '/'
-        }
-        else
-        {
-            filename_segment = filename;
-        }
-        RTE_DBG("Checking filename replacement: '%s' == '%s'\n", replacement->disc, filename_segment);
-
-        if (strieq(replacement->disc, filename_segment))
-        {
-            // We already checked that the external file exists when we registered the replacement.
-            RTE_DBG("Found a filename replacement! %d (%s -> %s)\n", i, replacement->disc, riivo_disc.sd_files[replacement->entrynum].path);
-            *entry_num = replacement->entrynum;
-            return true;
-        }
+        filename++; // Normalization: trim leading slashes, both normal replacements and filename replacements are registered without leading slashes.
     }
 
-    for (int i = riivo_disc.replacements_count - 1; i >= 0; i--)
+    const char *filename_segment = strrchr(filename, '/');
+    if (filename_segment)
     {
-        const struct rrc_riivo_file_replacement *replacement = &riivo_disc.replacements[i];
-        RTE_DBG("Checking file replacement: '%s' == '%s'\n", replacement->disc, filename);
+        filename_segment++; // Skip the '/'
+    }
+    else
+    {
+        filename_segment = filename;
+    }
+    u32 full_hash = rrc_hash_string_lowercase(filename);
+    u32 filename_hash = rrc_hash_string_lowercase(filename_segment);
 
-        // Trim leading slashes from either path.
-        const char *disc_path = replacement->disc;
-        if (*disc_path == '/')
-        {
-            disc_path++;
-        }
-        if (*filename == '/')
-        {
-            filename++;
-        }
+    // Look for filename search replacements first.
+    if (rte_dvd_search_replacement(filename_hash, filename_segment, riivo_disc.filename_replacements, riivo_disc.filename_replacements_count, entry_num))
+    {
+        return true;
+    }
 
-        if (strieq(disc_path, filename))
-        {
-            // We already checked that the external file exists when we registered the replacement.
-            RTE_DBG("Found a file replacement! %d (%s -> %s)\n", i, disc_path, riivo_disc.sd_files[replacement->entrynum].path);
-            *entry_num = replacement->entrynum;
-            return true;
-        }
+    // Look for normal replacements.
+    if (rte_dvd_search_replacement(full_hash, filename, riivo_disc.replacements, riivo_disc.replacements_count, entry_num))
+    {
+        return true;
     }
 
     return false;

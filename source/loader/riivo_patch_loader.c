@@ -18,6 +18,7 @@
 */
 
 #include <riivo.h>
+#include <hash.h>
 #include "../util.h"
 #include "riivo_patch_loader.h"
 #include "../settingsfile.h"
@@ -25,6 +26,7 @@
 #include "binary_loader.h"
 #include "../sd.h"
 #include <sys/dirent.h>
+#include <stdlib.h>
 #include "../time.h"
 
 #include <ogc/system.h>
@@ -224,11 +226,18 @@ static void _rrc_riivo_handle_file_patch(struct vec *sd_files,
         vec_push(sd_files, &new_file);
     }
 
+    bool is_filename_replacement = disc_path[0] != '/';
+    if (disc_path[0] == '/')
+    {
+        disc_path++;
+    }
     const char *disc_path_m1 = bump_alloc_string(mem1, disc_path);
+    u32 hash = rrc_hash_string(disc_path);
 
     struct rrc_riivo_file_replacement new_replacement = {
         .disc = disc_path_m1,
         .entrynum = entrynum,
+        .hash = hash,
     };
 
     if (replacements->len >= GLOBAL_MAX_FOLDER_FILES)
@@ -236,18 +245,18 @@ static void _rrc_riivo_handle_file_patch(struct vec *sd_files,
         RRC_FATAL("Too many SD files for Riivolution patch loader! Found %d files, but max is %d", entrynum + 1, GLOBAL_MAX_FOLDER_FILES);
     }
 
-    SYS_Report("Registering file replacement: %s -> %s (entrynum %d %s)\n", disc_path, external_path, entrynum, ((struct rrc_riivo_sd_file *)vec_at(sd_files, entrynum))->path);
+    SYS_Report("Registering file replacement: %s -> %s (entrynum %d %s hash %x)\n", disc_path, external_path, entrynum, ((struct rrc_riivo_sd_file *)vec_at(sd_files, entrynum))->path, hash);
 
-    if (disc_path[0] == '/')
-    {
-        // TODO: check if there's already a replacement for this path and if yes, remove the other one.
-        vec_push(replacements, &new_replacement);
-    }
-    else
+    if (is_filename_replacement)
     {
         // TODO: check if there's already a replacement for this path and if yes, remove the other one.
         // Filename search replacement.
         vec_push(filename_replacements, &new_replacement);
+    }
+    else
+    {
+        // TODO: check if there's already a replacement for this path and if yes, remove the other one.
+        vec_push(replacements, &new_replacement);
     }
 }
 
@@ -279,8 +288,8 @@ static void _rrc_riivo_combine_paths(const char *left, const char *right, char *
         }
 
         snprintf(out, out_sz, "%s%s%s", left, left_ends_with_slash ? "" : "/", right);
-        strlower(out);
     }
+    strlower(out);
 }
 
 static struct rrc_result _rrc_riivo_handle_folder_patch(struct vec *sd_files,
@@ -368,6 +377,17 @@ static struct rrc_result rrc_replace_main_dol(struct rrc_dol *dol, const char *m
     return rrc_result_success;
 }
 
+static int cmp_file_replacements_by_hash(const void *a, const void *b)
+{
+    const struct rrc_riivo_file_replacement *repl_a = a;
+    const struct rrc_riivo_file_replacement *repl_b = b;
+
+    u32 ahash = repl_a->hash;
+    u32 bhash = repl_b->hash;
+
+    return (ahash > bhash) - (ahash < bhash);
+}
+
 struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings, u32 *mem1, u32 *mem2, struct rrc_dol *dol, struct parse_riivo_output *out)
 {
 #define PARSE_REQUIRED_ATTR(node, var, attr)                                                                    \
@@ -443,7 +463,12 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
             PARSE_REQUIRED_ATTR(file, disc_path_mxml, "disc");
             PARSE_REQUIRED_ATTR(file, external_path_mxml, "external");
 
-            _rrc_riivo_handle_file_patch(&sd_files, &replacements, &filename_replacements, mem1, &main_dol_path, disc_path_mxml, external_path_mxml);
+            char *disc_path_normalized = strdup(disc_path_mxml);
+            strlower(disc_path_normalized);
+
+            _rrc_riivo_handle_file_patch(&sd_files, &replacements, &filename_replacements, mem1, &main_dol_path, disc_path_normalized, external_path_mxml);
+
+            free(disc_path_normalized);
         }
         mxmlIndexDelete(file_repl_index);
 
@@ -511,6 +536,9 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
         rrc_replace_main_dol(dol, main_dol_path);
         free(main_dol_path);
     }
+
+    qsort(replacements.data, replacements.len, replacements.value_size, cmp_file_replacements_by_hash);
+    qsort(filename_replacements.data, filename_replacements.len, filename_replacements.value_size, cmp_file_replacements_by_hash);
 
     // TODO: copy vec data into MEM1 here and replace the NULLs below
 
