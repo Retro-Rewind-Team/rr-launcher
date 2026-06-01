@@ -184,7 +184,8 @@ static void _rrc_riivo_handle_file_patch(struct vec *sd_files,
                                          u32 *mem1,
                                          char **main_dol_path,
                                          const char *disc_path,
-                                         const char *external_path)
+                                         const char *external_path,
+                                         bool check_exists)
 {
     if (strcmp(disc_path, "main.dol") == 0)
     {
@@ -204,15 +205,19 @@ static void _rrc_riivo_handle_file_patch(struct vec *sd_files,
 
     if (entrynum == -1)
     {
-        FILE *f = fopen(external_path, "r");
-        if (f)
+        // Optimization: if we're coming from a folder patch iterating directory contents, we don't need to check that the file exists.
+        if (check_exists)
         {
-            fclose(f);
-        }
-        else
-        {
-            // File doesn't exist on the SD card.
-            return;
+            FILE *f = fopen(external_path, "r");
+            if (f)
+            {
+                fclose(f);
+            }
+            else
+            {
+                // File doesn't exist on the SD card.
+                return;
+            }
         }
 
         // SD file doesn't exist in the list yet, allocate a new entry.
@@ -244,8 +249,6 @@ static void _rrc_riivo_handle_file_patch(struct vec *sd_files,
     {
         RRC_FATAL("Too many SD files for Riivolution patch loader! Found %d files, but max is %d", entrynum + 1, GLOBAL_MAX_FOLDER_FILES);
     }
-
-    SYS_Report("Registering file replacement: %s -> %s (entrynum %d %s hash %x)\n", disc_path, external_path, entrynum, ((struct rrc_riivo_sd_file *)vec_at(sd_files, entrynum))->path, hash);
 
     if (is_filename_replacement)
     {
@@ -330,7 +333,7 @@ static struct rrc_result _rrc_riivo_handle_folder_patch(struct vec *sd_files,
 
         if (entry->d_type == DT_REG)
         {
-            _rrc_riivo_handle_file_patch(sd_files, replacements, filename_replacements, mem1, main_dol_path, cur_disc_path, cur_external_path);
+            _rrc_riivo_handle_file_patch(sd_files, replacements, filename_replacements, mem1, main_dol_path, cur_disc_path, cur_external_path, false);
         }
         else if (recursive && entry->d_type == DT_DIR)
         {
@@ -466,7 +469,7 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
             char *disc_path_normalized = strdup(disc_path_mxml);
             strlower(disc_path_normalized);
 
-            _rrc_riivo_handle_file_patch(&sd_files, &replacements, &filename_replacements, mem1, &main_dol_path, disc_path_normalized, external_path_mxml);
+            _rrc_riivo_handle_file_patch(&sd_files, &replacements, &filename_replacements, mem1, &main_dol_path, disc_path_normalized, external_path_mxml, true);
 
             free(disc_path_normalized);
         }
