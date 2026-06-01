@@ -146,9 +146,12 @@ void vec_init(struct vec *vec, int capacity, int value_size)
     vec->cap = capacity;
 }
 
+#define _RRC_VEC_BOUNDS_CHECK(vec, index) \
+    RRC_ASSERT(index >= 0 && index < vec->len, "vec index out of bounds")
+
 void *vec_at(struct vec *vec, int index)
 {
-    RRC_ASSERT(index >= 0 && index < vec->len, "vec index out of bounds");
+    _RRC_VEC_BOUNDS_CHECK(vec, index);
     return (char *)vec->data + (index * vec->value_size);
 }
 
@@ -173,9 +176,36 @@ void vec_push(struct vec *vec, void *value)
     memcpy(dest, value, vec->value_size);
 }
 
+void vec_swap_remove(struct vec *vec, int index)
+{
+    _RRC_VEC_BOUNDS_CHECK(vec, index);
+    if (index != vec->len - 1)
+    {
+        void *last_value = vec_at(vec, vec->len - 1);
+        void *dest = vec_at(vec, index);
+        memcpy(dest, last_value, vec->value_size);
+    }
+    vec->len--;
+}
+
 void vec_free(struct vec *vec)
 {
     free(vec->data);
+}
+
+static void _rrc_remove_replacement(struct vec *replacements, struct rrc_riivo_file_replacement *remove)
+{
+    for (int i = 0; i < replacements->len; i++)
+    {
+        struct rrc_riivo_file_replacement *repl = vec_at(replacements, i);
+        if (repl->hash == remove->hash && strcmp(repl->disc, remove->disc) == 0)
+        {
+            // NB: swap_remove is OK here because (1) we only need it to be sorted _after_ all of the XML processing (so at this point the order doesn't matter),
+            // and (2) we have a `return` so we're not messing up any future iterations of the loop.
+            vec_swap_remove(replacements, i);
+            return;
+        }
+    }
 }
 
 static void _rrc_riivo_handle_file_patch(struct vec *sd_files,
@@ -250,15 +280,17 @@ static void _rrc_riivo_handle_file_patch(struct vec *sd_files,
         RRC_FATAL("Too many SD files for Riivolution patch loader! Found %d files, but max is %d", entrynum + 1, GLOBAL_MAX_FOLDER_FILES);
     }
 
+    // Rule: later replacements override earlier ones, so remove the existing replacement if there exists one.
+    _rrc_remove_replacement(filename_replacements, &new_replacement);
+    _rrc_remove_replacement(replacements, &new_replacement);
+
     if (is_filename_replacement)
     {
-        // TODO: check if there's already a replacement for this path and if yes, remove the other one.
         // Filename search replacement.
         vec_push(filename_replacements, &new_replacement);
     }
     else
     {
-        // TODO: check if there's already a replacement for this path and if yes, remove the other one.
         vec_push(replacements, &new_replacement);
     }
 }
@@ -542,8 +574,6 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
 
     qsort(replacements.data, replacements.len, replacements.value_size, cmp_file_replacements_by_hash);
     qsort(filename_replacements.data, filename_replacements.len, filename_replacements.value_size, cmp_file_replacements_by_hash);
-
-    // TODO: copy vec data into MEM1 here and replace the NULLs below
 
     *mem1 -= sizeof(struct rrc_riivo_sd_file) * sd_files.len;
     struct rrc_riivo_sd_file *mem1_sd_files = (struct rrc_riivo_sd_file *)*mem1;
