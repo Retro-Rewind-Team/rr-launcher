@@ -28,6 +28,7 @@
 #include <sys/dirent.h>
 #include <stdlib.h>
 #include "../time.h"
+#include "../vec.h"
 
 #include <ogc/system.h>
 
@@ -39,23 +40,6 @@ static char *bump_alloc_string(u32 *arena, const char *src)
     memcpy(dest, src, src_len);
     dest[src_len] = '\0';
     return dest;
-}
-
-bool should_register_patch_mystuff_aware(bool is_rr_mystuff, bool is_ctgpr_mystuff, bool is_rr_music_mystuff, bool is_ctgp_music_mystuff, int my_stuff_setting)
-{
-    if (!is_rr_mystuff && !is_ctgpr_mystuff && !is_rr_music_mystuff && !is_ctgp_music_mystuff)
-        return true;
-
-    if (is_rr_mystuff && my_stuff_setting == RRC_SETTINGSFILE_MY_STUFF_RR)
-        return true;
-    if (is_ctgpr_mystuff && my_stuff_setting == RRC_SETTINGSFILE_MY_STUFF_CTGP)
-        return true;
-    if (is_rr_music_mystuff && my_stuff_setting == RRC_SETTINGSFILE_MY_STUFF_RR_MUSIC)
-        return true;
-    if (is_ctgp_music_mystuff && my_stuff_setting == RRC_SETTINGSFILE_MY_STUFF_CTGP_MUSIC)
-        return true;
-
-    return false;
 }
 
 static struct rrc_result rrc_patch_loader_append_patches_for_option(
@@ -127,70 +111,6 @@ static struct rrc_result rrc_patch_loader_append_patches_for_option(
     }
 
     return rrc_result_create_error_corrupted_rr_xml("option not found in xml");
-}
-
-struct vec
-{
-    void *data;
-    int value_size;
-    int len;
-    int cap;
-};
-
-void vec_init(struct vec *vec, int capacity, int value_size)
-{
-    vec->data = malloc(value_size * capacity);
-    RRC_ASSERT(vec->data != NULL, "OOM while allocating vec data");
-    vec->value_size = value_size;
-    vec->len = 0;
-    vec->cap = capacity;
-}
-
-#define _RRC_VEC_BOUNDS_CHECK(vec, index) \
-    RRC_ASSERT(index >= 0 && index < vec->len, "vec index out of bounds")
-
-void *vec_at(struct vec *vec, int index)
-{
-    _RRC_VEC_BOUNDS_CHECK(vec, index);
-    return (char *)vec->data + (index * vec->value_size);
-}
-
-void vec_push(struct vec *vec, void *value)
-{
-    if (vec->len >= vec->cap)
-    {
-        int new_cap = vec->cap * 2;
-        if (new_cap <= vec->cap) // Check for overflow
-        {
-            RRC_FATAL("vec capacity overflow");
-        }
-
-        void *new_data = realloc(vec->data, new_cap * vec->value_size);
-        RRC_ASSERT(new_data != NULL, "OOM while reallocating vec data");
-        vec->data = new_data;
-        vec->cap = new_cap;
-    }
-
-    vec->len++;
-    void *dest = vec_at(vec, vec->len - 1);
-    memcpy(dest, value, vec->value_size);
-}
-
-void vec_swap_remove(struct vec *vec, int index)
-{
-    _RRC_VEC_BOUNDS_CHECK(vec, index);
-    if (index != vec->len - 1)
-    {
-        void *last_value = vec_at(vec, vec->len - 1);
-        void *dest = vec_at(vec, index);
-        memcpy(dest, last_value, vec->value_size);
-    }
-    vec->len--;
-}
-
-void vec_free(struct vec *vec)
-{
-    free(vec->data);
 }
 
 static void _rrc_remove_replacement(struct vec *replacements, struct rrc_riivo_file_replacement *remove)
