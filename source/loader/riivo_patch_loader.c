@@ -116,6 +116,9 @@ static struct rrc_result rrc_patch_loader_append_patches_for_option(
     return rrc_result_create_error_corrupted_rr_xml("option not found in xml");
 }
 
+/**
+ * Removes the given replacement from the replacements array. This does **not** preserve the order of the array.
+ */
 static void _rrc_riivo_remove_replacement(struct vec *replacements, struct rrc_riivo_file_replacement *remove)
 {
     for (int i = 0; i < replacements->len; i++)
@@ -131,6 +134,9 @@ static void _rrc_riivo_remove_replacement(struct vec *replacements, struct rrc_r
     }
 }
 
+/**
+ * Handles a file replacement patch. This is called for <file>s directly, and for each file in a <folder> patch.
+ */
 static void
 _rrc_riivo_handle_file_patch(struct vec *sd_files,
                              struct vec *replacements,
@@ -144,6 +150,8 @@ _rrc_riivo_handle_file_patch(struct vec *sd_files,
     if (strcmp(disc_path, "main.dol") == 0)
     {
         *main_dol_path = strdup(external_path);
+        // No need to actually register main.dol as a real replacement, it's handled specially via the `main_dol_path` pointer.
+        return;
     }
 
     if (disc_path[0] == '.' && disc_path[1] == '_')
@@ -165,7 +173,7 @@ _rrc_riivo_handle_file_patch(struct vec *sd_files,
 
     if (entrynum == -1)
     {
-        // Optimization: if we're coming from a folder patch iterating directory contents, we don't need to check that the file exists.
+        // Optimization: if we're coming from a folder patch iterating directory contents (check_exists=false), we don't need to check that the file exists.
         if (check_exists)
         {
             FILE *f = fopen(external_path, "r");
@@ -191,6 +199,7 @@ _rrc_riivo_handle_file_patch(struct vec *sd_files,
         vec_push(sd_files, &new_file);
     }
 
+    // If the disc path starts with a `/`, then it is a full replacement, otherwise it is a filename replacement.
     bool is_filename_replacement = disc_path[0] != '/';
     if (disc_path[0] == '/')
     {
@@ -205,7 +214,7 @@ _rrc_riivo_handle_file_patch(struct vec *sd_files,
         .hash = hash,
     };
 
-    if (replacements->len >= GLOBAL_MAX_FOLDER_FILES)
+    if (replacements->len + filename_replacements->len >= GLOBAL_MAX_FOLDER_FILES)
     {
         RRC_FATAL("Too many SD files for Riivolution patch loader! Found %d files, but max is %d", entrynum + 1, GLOBAL_MAX_FOLDER_FILES);
     }
@@ -232,6 +241,10 @@ static void strlower(char *str)
         str[i] = tolower(str[i]);
 }
 
+/**
+ * Combines two paths, either by returning the non-empty one, or if both are non-empty, joins them with a slash
+ * and normalizes them to lowercase.
+ */
 static void _rrc_riivo_combine_paths(const char *left, const char *right, char *out, int out_sz)
 {
     if (left[0] == '\0')
@@ -284,8 +297,6 @@ static struct rrc_result _rrc_riivo_handle_folder_patch(struct vec *sd_files,
 
         int d_name_len = strlen(entry->d_name);
 
-        // TODO: verify the sizes are correct
-
         int disc_path_sz = disc_path_len + d_name_len + 2 /* null terminator + slash */;
         char *cur_disc_path = malloc(disc_path_sz);
         _rrc_riivo_combine_paths(disc_path, entry->d_name, cur_disc_path, disc_path_sz);
@@ -303,8 +314,9 @@ static struct rrc_result _rrc_riivo_handle_folder_patch(struct vec *sd_files,
             struct rrc_result res = _rrc_riivo_handle_folder_patch(sd_files, replacements, filename_replacements, mem1, main_dol_path, cur_disc_path, cur_external_path, true);
             if (res.err)
             {
-                // TODO: free malloc()s.
                 closedir(dir);
+                free(cur_disc_path);
+                free(cur_external_path);
                 return res;
             }
         }
@@ -432,10 +444,13 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
 
             char *disc_path_normalized = strdup(disc_path_mxml);
             strlower(disc_path_normalized);
+            char *external_path_normalized = strdup(external_path_mxml);
+            strlower(external_path_normalized);
 
-            _rrc_riivo_handle_file_patch(&sd_files, &replacements, &filename_replacements, mem1, &main_dol_path, disc_path_normalized, external_path_mxml, true);
+            _rrc_riivo_handle_file_patch(&sd_files, &replacements, &filename_replacements, mem1, &main_dol_path, disc_path_normalized, external_path_normalized, true);
 
             free(disc_path_normalized);
+            free(external_path_normalized);
         }
         mxmlIndexDelete(file_repl_index);
 
