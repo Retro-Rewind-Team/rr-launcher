@@ -150,7 +150,6 @@ asm("patch_dol_helper:\n"
 void rrc_loader_load(struct rrc_dol *dol, struct rrc_settingsfile *settings, void *bi2_dest, u32 mem1_hi, u32 mem2_hi, char region)
 {
 
-    // TODO: should we do malloc() and check that it's less than 0x8090000 to make sure it didn't overwrite the DOL??
     struct rrc_result res;
 
     // runtime-ext needs to be loaded before parsing riivo patches, as it writes to a static.

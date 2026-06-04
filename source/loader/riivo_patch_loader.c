@@ -221,6 +221,7 @@ _rrc_riivo_handle_file_patch(struct vec *sd_files,
     }
     else
     {
+        // Full file replacement.
         vec_push(replacements, &new_replacement);
     }
 }
@@ -388,6 +389,7 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
     struct vec replacements;
     vec_init(&replacements, 4, sizeof(struct rrc_riivo_file_replacement));
 
+    // Filename search replacements. These are different from `replacements` in that they only match against the filename instead of the full path.
     struct vec filename_replacements;
     vec_init(&filename_replacements, 4, sizeof(struct rrc_riivo_file_replacement));
 
@@ -505,17 +507,17 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
     qsort(replacements.data, replacements.len, replacements.value_size, cmp_file_replacements_by_hash);
     qsort(filename_replacements.data, filename_replacements.len, filename_replacements.value_size, cmp_file_replacements_by_hash);
 
-    *mem1 -= sizeof(struct rrc_riivo_sd_file) * sd_files.len;
+    *mem1 = align_down(*mem1 - sizeof(struct rrc_riivo_sd_file) * sd_files.len, __alignof__(struct rrc_riivo_sd_file));
     struct rrc_riivo_sd_file *mem1_sd_files = (struct rrc_riivo_sd_file *)*mem1;
     memcpy(mem1_sd_files, sd_files.data, sizeof(struct rrc_riivo_sd_file) * sd_files.len);
 
     SYS_Report("Allocated %d bytes for SD files to %x\n", (int)(sizeof(struct rrc_riivo_sd_file) * sd_files.len), *mem1);
 
-    *mem1 -= sizeof(struct rrc_riivo_file_replacement) * replacements.len;
+    *mem1 = align_down(*mem1 - sizeof(struct rrc_riivo_file_replacement) * replacements.len, __alignof__(struct rrc_riivo_file_replacement));
     struct rrc_riivo_file_replacement *mem1_replacements = (struct rrc_riivo_file_replacement *)*mem1;
     memcpy(mem1_replacements, replacements.data, sizeof(struct rrc_riivo_file_replacement) * replacements.len);
 
-    *mem1 -= sizeof(struct rrc_riivo_file_replacement) * filename_replacements.len;
+    *mem1 = align_down(*mem1 - sizeof(struct rrc_riivo_file_replacement) * filename_replacements.len, __alignof__(struct rrc_riivo_file_replacement));
     struct rrc_riivo_file_replacement *mem1_filename_replacements = (struct rrc_riivo_file_replacement *)*mem1;
     memcpy(mem1_filename_replacements, filename_replacements.data, sizeof(struct rrc_riivo_file_replacement) * filename_replacements.len);
 

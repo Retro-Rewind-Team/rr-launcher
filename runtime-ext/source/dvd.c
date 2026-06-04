@@ -50,12 +50,10 @@ extern u8 rrc_bitflags;
 #define SPECIAL_ENTRYNUM (0b0111111101 << 22)
 #define SPECIAL_ENTRYNUM_MASK (0b1111111111 << 22)
 
-#define MAX_PATH_LEN 64
 #define MAX_CONCURRENT_FILES (16)
 
 struct rte_open_file
 {
-    // NB: Must be the first field, as we treat `FILE_STRUCT*` equivalently to an `rte_open_file*`.
     FILE_STRUCT file_struct;
     s32 refcount;
 };
@@ -91,6 +89,8 @@ _Static_assert(S_IFMT == 0170000);
  * Stores additional data for an opened file. A refcount of > 0 implies that it is in use,
  * zero means that it is not. Closing a file will decrement the refcount,
  * dropping to zero will close the file and it is free to be reused.
+ *
+ * Importantly, this static is zero-initialized such that each refcount starts at 0 and is used by alloc_open_file().
  */
 static struct rte_open_file open_files[MAX_CONCURRENT_FILES] = {0};
 
@@ -110,34 +110,8 @@ static struct rte_open_file *rte_dvd_alloc_open_file()
     RTE_FATAL("Attempted to open more than " RTE_STRINGIFY(MAX_CONCURRENT_FILES) " SD files at once!");
 }
 
-char *strstr1(const char *s1, const char *s2)
-{
-    size_t n = strlen(s2);
-    while (*s1)
-        if (!memcmp(s1++, s2, n))
-            return (char *)(s1 - 1);
-    return 0;
-}
-
 /**
- * Checks if two strings are equal, ignoring case.
- */
-bool strieq(const char *a, const char *b)
-{
-    int a_len = strlen(a), b_len = strlen(b);
-    if (a_len != b_len)
-        return false;
-
-    for (int i = 0; i < a_len; i++)
-    {
-        if (tolower(a[i]) != tolower(b[i]))
-            return false;
-    }
-    return true;
-}
-
-/**
- * Searches for a file replacement by the hash of the normalized disc path.
+ * Searches for a file replacement by just the hash of the normalized disc path.
  * Normalized here means that leading slashes need to be removed and the path is lowercased.
  *
  * **NOTE** that due to hash collision, the returned int may not immediately be the correct replacement:
@@ -184,14 +158,14 @@ static int rte_dvd_search_replacement_by_hash(u32 hash, struct rrc_riivo_file_re
  */
 static bool rte_dvd_search_replacement(u32 hash, const char *filename, struct rrc_riivo_file_replacement *replacements, int replacements_len, s32 *entry_num)
 {
-    int index = rte_dvd_search_replacement_by_hash(hash, riivo_disc.replacements, riivo_disc.replacements_count);
+    int index = rte_dvd_search_replacement_by_hash(hash, replacements, replacements_len);
     if (index != -1)
     {
         // We found a replacement by hash. Now find the correct one by comparing paths.
-        for (int i = index; i < riivo_disc.replacements_count && riivo_disc.replacements[i].hash == hash; i++)
+        for (int i = index; i < replacements_len && replacements[i].hash == hash; i++)
         {
-            const struct rrc_riivo_file_replacement *replacement = &riivo_disc.replacements[i];
-            if (strieq(replacement->disc, filename))
+            const struct rrc_riivo_file_replacement *replacement = &replacements[i];
+            if (strcicmp(replacement->disc, filename) == 0)
             {
                 RTE_DBG("Found a file replacement! %d (%s -> %s)\n", i, replacement->disc, riivo_disc.sd_files[replacement->entrynum].path);
                 *entry_num = replacement->entrynum;
@@ -203,9 +177,8 @@ static bool rte_dvd_search_replacement(u32 hash, const char *filename, struct rr
 }
 
 /**
- * Attempts to resolve a DVD path to an entrynum, based on the riivo file and folder replacements.
- * Returns true and writes the entrynum to `entry_num` if a replacement was found,
- * otherwise returns false.
+ * Attempts to resolve a DVD path to an entrynum, based on the riivo file replacements.
+ * Returns true if a replacement was found, otherwise returns false.
  */
 static bool rte_dvd_resolve_path_to_entry_num(const char *filename, s32 *entry_num)
 {
