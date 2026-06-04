@@ -42,6 +42,9 @@ static char *bump_alloc_string(u32 *arena, const char *src)
     return dest;
 }
 
+/**
+ * For a given <option> in the XML, find the enabled <choice> based on the value and append all its <patch>es.
+ */
 static struct rrc_result rrc_patch_loader_append_patches_for_option(
     mxml_node_t *top,
     mxml_index_t *index,
@@ -113,7 +116,7 @@ static struct rrc_result rrc_patch_loader_append_patches_for_option(
     return rrc_result_create_error_corrupted_rr_xml("option not found in xml");
 }
 
-static void _rrc_remove_replacement(struct vec *replacements, struct rrc_riivo_file_replacement *remove)
+static void _rrc_riivo_remove_replacement(struct vec *replacements, struct rrc_riivo_file_replacement *remove)
 {
     for (int i = 0; i < replacements->len; i++)
     {
@@ -128,18 +131,25 @@ static void _rrc_remove_replacement(struct vec *replacements, struct rrc_riivo_f
     }
 }
 
-static void _rrc_riivo_handle_file_patch(struct vec *sd_files,
-                                         struct vec *replacements,
-                                         struct vec *filename_replacements,
-                                         u32 *mem1,
-                                         char **main_dol_path,
-                                         const char *disc_path,
-                                         const char *external_path,
-                                         bool check_exists)
+static void
+_rrc_riivo_handle_file_patch(struct vec *sd_files,
+                             struct vec *replacements,
+                             struct vec *filename_replacements,
+                             u32 *mem1,
+                             char **main_dol_path,
+                             const char *disc_path,
+                             const char *external_path,
+                             bool check_exists)
 {
     if (strcmp(disc_path, "main.dol") == 0)
     {
         *main_dol_path = strdup(external_path);
+    }
+
+    if (disc_path[0] == '.' && disc_path[1] == '_')
+    {
+        // Ignore AppleDouble files.
+        return;
     }
 
     struct rrc_riivo_sd_file *sd_files_data = sd_files->data;
@@ -201,8 +211,8 @@ static void _rrc_riivo_handle_file_patch(struct vec *sd_files,
     }
 
     // Rule: later replacements override earlier ones, so remove the existing replacement if there exists one.
-    _rrc_remove_replacement(filename_replacements, &new_replacement);
-    _rrc_remove_replacement(replacements, &new_replacement);
+    _rrc_riivo_remove_replacement(filename_replacements, &new_replacement);
+    _rrc_riivo_remove_replacement(replacements, &new_replacement);
 
     if (is_filename_replacement)
     {

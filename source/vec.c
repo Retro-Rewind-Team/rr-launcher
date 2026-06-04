@@ -43,11 +43,8 @@ void vec_push(struct vec *vec, void *value)
 {
     if (vec->len >= vec->cap)
     {
+        RRC_ASSERT(vec->cap < 0x3FFFFFFF, "vec capacity too large"); // Prevent overflow when doubling capacity.
         int new_cap = vec->cap * 2;
-        if (new_cap <= vec->cap) // Check for overflow
-        {
-            RRC_FATAL("vec capacity overflow");
-        }
 
         void *new_data = realloc(vec->data, new_cap * vec->value_size);
         RRC_ASSERT(new_data != NULL, "OOM while reallocating vec data");
