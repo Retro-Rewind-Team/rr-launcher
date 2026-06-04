@@ -33,7 +33,7 @@ DOLS := $(addsuffix .dol, $(FILENAMES))
 ELFS := $(addsuffix .elf, $(FILENAMES))
 
 # Linker script is added per region in the elf rule
-LDFLAGS := $(OFILES) $(MACHDEP) -Wl,--section-start=.init=81744260,--section-start=.text=81744660,--section-start=.rodata=81782fe0
+LDFLAGS := $(OFILES) $(MACHDEP) -Wl,--section-start=.init=8175c900,--section-start=.text=8175cd00,--section-start=.rodata=81782fe0
 
 all: $(DOLS)
 

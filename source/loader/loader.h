@@ -46,7 +46,7 @@ bool rrc_signature_written();
 // fixed-address static data, for example at 0x817ffff0 we have the rrc_bitflags.
 #define RRC_RUNTIME_EXT_DOL_SAFE_END (0x817fffff - 64)
 
-#define RRC_RUNTIME_EXT_DOL_SAFE_START 0x81744260
+#define RRC_RUNTIME_EXT_DOL_SAFE_START 0x8175c900
 
 // The "ABI version" of runtime-ext; incremented each time a breaking change to the ABI is necessary (different addresses etc.)
 // This needs to match the ABI version declared in Code.pul or otherwise an error is emitted.
