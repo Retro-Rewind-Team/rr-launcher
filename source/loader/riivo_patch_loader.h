@@ -26,16 +26,6 @@
 #include "../settingsfile.h"
 #include "../result.h"
 
-/*
-        bool is_rr_mystuff = strcmp(elem_id, "RRLoad") == 0;
-        bool is_ctgpr_mystuff = strcmp(elem_id, "RRCTGPLoad") == 0;
-
-        // Skip music if the My Stuff exclusive option for it is disabled.
-        bool is_rr_music = strcmp(elem_id, "RRLoadMusic") == 0;
-        bool is_ctgp_music = strcmp(elem_id, "RRCTGPLoadMusic") == 0;
-
-*/
-
 #if defined(RRC_BETA) && RRC_BETA >= 1
 #define RRC_RR_MY_STUFF_PATCH_ID "RRBetaLoad"
 #define RRC_CTGP_MY_STUFF_PATCH_ID "RRBetaCTGPLoad"
@@ -66,6 +56,10 @@ struct parse_riivo_output
  * <memory> patches are also parsed.
  * The passed `dol` is overwritten if a main.dol replacement is encountered.
  */
-struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings, u32 *mem1, u32 *mem2, struct rrc_dol *dol, struct parse_riivo_output *out);
+struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings,
+                                               u32 *mem1,
+                                               u32 *mem2,
+                                               struct rrc_dol *dol,
+                                               struct parse_riivo_output *out);
 
 #endif

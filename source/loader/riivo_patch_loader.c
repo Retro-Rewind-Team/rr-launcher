@@ -465,7 +465,7 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
 
             PARSE_REQUIRED_ATTR(folder, external_path_mxml, "external");
             const char *recursive_mxml = mxmlElementGetAttr(folder, "recursive");
-            bool recursive = recursive_mxml != NULL && strcmp(recursive_mxml, "true") == 0;
+            bool recursive = recursive_mxml == NULL || strcmp(recursive_mxml, "true") == 0;
 
             _rrc_riivo_handle_folder_patch(&sd_files, &replacements, &filename_replacements, mem1, &main_dol_path, disc_path_mxml, external_path_mxml, recursive);
         }
@@ -525,8 +525,6 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
     *mem1 = align_down(*mem1 - sizeof(struct rrc_riivo_sd_file) * sd_files.len, __alignof__(struct rrc_riivo_sd_file));
     struct rrc_riivo_sd_file *mem1_sd_files = (struct rrc_riivo_sd_file *)*mem1;
     memcpy(mem1_sd_files, sd_files.data, sizeof(struct rrc_riivo_sd_file) * sd_files.len);
-
-    SYS_Report("Allocated %d bytes for SD files to %x\n", (int)(sizeof(struct rrc_riivo_sd_file) * sd_files.len), *mem1);
 
     *mem1 = align_down(*mem1 - sizeof(struct rrc_riivo_file_replacement) * replacements.len, __alignof__(struct rrc_riivo_file_replacement));
     struct rrc_riivo_file_replacement *mem1_replacements = (struct rrc_riivo_file_replacement *)*mem1;
