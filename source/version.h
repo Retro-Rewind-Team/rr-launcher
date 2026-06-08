@@ -23,6 +23,14 @@
 #include <gctypes.h>
 #include "result.h"
 
+#define _RRC_INTERNAL_VERSION_MAJOR 0
+#define _RRC_INTERNAL_VERSION_MINOR 9
+#define _RRC_INTERNAL_VERSION_PATCH 0
+
+#define RRC_INTERNAL_VERSION ((struct rrc_version){.major = _RRC_INTERNAL_VERSION_MAJOR, \
+                                                   .minor = _RRC_INTERNAL_VERSION_MINOR, \
+                                                   .patch = _RRC_INTERNAL_VERSION_PATCH})
+
 struct rrc_version
 {
     int major;
