@@ -214,11 +214,6 @@ _rrc_riivo_handle_file_patch(struct vec *sd_files,
         .hash = hash,
     };
 
-    if (replacements->len + filename_replacements->len >= GLOBAL_MAX_FOLDER_FILES)
-    {
-        RRC_FATAL("Too many SD files for Riivolution patch loader! Found %d files, but max is %d", entrynum + 1, GLOBAL_MAX_FOLDER_FILES);
-    }
-
     // Rule: later replacements override earlier ones, so remove the existing replacement if there exists one.
     _rrc_riivo_remove_replacement(filename_replacements, &new_replacement);
     _rrc_riivo_remove_replacement(replacements, &new_replacement);
@@ -517,6 +512,12 @@ struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings
     {
         rrc_replace_main_dol(dol, main_dol_path);
         free(main_dol_path);
+    }
+
+    int total_replacements = replacements.len + filename_replacements.len;
+    if (total_replacements > GLOBAL_MAX_FOLDER_FILES)
+    {
+        RRC_FATAL("Too many SD files for Riivolution patch loader! Found %d files, but max is %d", total_replacements, GLOBAL_MAX_FOLDER_FILES);
     }
 
     qsort(replacements.data, replacements.len, replacements.value_size, cmp_file_replacements_by_hash);
