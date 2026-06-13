@@ -214,18 +214,17 @@ _rrc_riivo_handle_file_patch(struct vec *sd_files,
         .hash = hash,
     };
 
-    // Rule: later replacements override earlier ones, so remove the existing replacement if there exists one.
-    _rrc_riivo_remove_replacement(filename_replacements, &new_replacement);
-    _rrc_riivo_remove_replacement(replacements, &new_replacement);
-
     if (is_filename_replacement)
     {
         // Filename search replacement.
+        // Rule: later replacements override earlier ones, so remove the existing replacement if there exists one.
+        _rrc_riivo_remove_replacement(filename_replacements, &new_replacement);
         vec_push(filename_replacements, &new_replacement);
     }
     else
     {
         // Full file replacement.
+        _rrc_riivo_remove_replacement(replacements, &new_replacement);
         vec_push(replacements, &new_replacement);
     }
 }
