@@ -1,7 +1,7 @@
 /*
     hash.h - hash function declarations
 
-    Copyright (C) 2025  Retro Rewind Team
+    Copyright (C) 2026  Retro Rewind Team
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
