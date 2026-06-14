@@ -32,7 +32,7 @@ SECTIONS {
     .dvd_fast_open                0x81782ee0 : { *(.dvd_fast_open) }                :dvd
     .dvd_read_prio                0x81782f20 : { *(.dvd_read_prio) }                :dvd
     .dvd_close                    0x81782f60 : { *(.dvd_close) }                    :dvd
-    .riivo_disc_ptr               0x81782fa0 : { *(.riivo_disc_ptr) }               :dvd
+    .riivo_disc                   0x81782fa0 : { *(.riivo_disc) }                   :dvd
 
     PROVIDE(dvd_convert_path_to_entrynum_trampoline = ADDR(.dvd_trampolines));
     PROVIDE(dvd_fast_open_trampoline = ADDR(.dvd_trampolines) + 32);

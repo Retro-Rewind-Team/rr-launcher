@@ -38,7 +38,7 @@
 /**
  * Contains pointers to the file replacements and SD file entries.
  */
-__attribute__((section(".riivo_disc_ptr"))) static struct rrc_riivo_disc riivo_disc = {0};
+__attribute__((section(".riivo_disc"))) static struct rrc_riivo_disc riivo_disc = {0};
 
 extern u8 rrc_bitflags;
 

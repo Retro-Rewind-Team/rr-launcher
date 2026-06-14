@@ -35,7 +35,7 @@ bool rrc_signature_written();
 #define RRC_RUNTIME_EXT_ABI_VERSION_ADDRESS 0x817ffffc
 // Must be kept in sync with runtime-ext/base.ld's PROVIDE and pulsar
 #define RRC_RR_BITFLAGS 0x817ffff0
-// Must be kept in sync with the .riivo_disc_ptr section address in runtime-ext's linker script
+// Must be kept in sync with the .riivo_disc section address in runtime-ext's linker script
 #define RRC_RIIVO_DISC_PTR 0x81782fa0
 // Must be kept in sync with the .dvd_trampolines section address in runtime-ext's linker script
 #define RRC_TRAMPOLINE_START 0x81782d60
