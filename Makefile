@@ -162,6 +162,7 @@ release: $(BUILD)
 	mkdir -p $(RELEASE)/apps/RetroRewind
 	cp runtime-ext/runtime-ext-* $(RELEASE)/RetroRewindChannel 
 	cp $(OUTPUT).dol $(RELEASE)/apps/RetroRewind/boot.dol
+	cp assets/THIRD_PARTY_NOTICES.txt $(RELEASE)/THIRD_PARTY_NOTICES.txt
 
 #---------------------------------------------------------------------------------
 else
