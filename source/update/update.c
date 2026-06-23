@@ -51,7 +51,7 @@ static void _rrc_curl_ssl_setup(CURL *curl)
         .flags = CURL_BLOB_NOCOPY
     };
     curl_easy_setopt(curl, CURLOPT_CAINFO_BLOB, &cainfo_blob);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
     curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_2);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L);
