@@ -97,15 +97,20 @@ void rrc_con_display_version()
 
     char vertext[32];
 
-    #if defined(RRC_BETA) && RRC_BETA >= 1
-        snprintf(vertext, 32, "Version: %i.%i.%i (RRBETA BUILD)", cached_version.major, cached_version.minor, cached_version.patch);   
-    #else
-        snprintf(vertext, 32, "Version: %i.%i.%i", cached_version.major, cached_version.minor, cached_version.patch);
-    #endif
+#if defined(RRC_BETA) && RRC_BETA >= 1
+    snprintf(vertext, 32, "RR: %i.%i.%i (RRBETA BUILD)", cached_version.major, cached_version.minor, cached_version.patch);
+#else
+    snprintf(vertext, 32, "RR: %i.%i.%i", cached_version.major, cached_version.minor, cached_version.patch);
+#endif
 
+    char internal_vertext[32];
+    struct rrc_version internal_version = RRC_INTERNAL_VERSION;
+    snprintf(internal_vertext, sizeof(internal_vertext), "Channel: %i.%i.%i", internal_version.major, internal_version.minor, internal_version.patch);
 
     rrc_con_cursor_seek_to(rrc_con_get_rows() - 2, rrc_con_get_cols() - strlen(vertext));
     printf("%s", vertext);
+    rrc_con_cursor_seek_to(rrc_con_get_rows() - 1, rrc_con_get_cols() - strlen(internal_vertext));
+    printf("%s", internal_vertext);
 }
 
 void rrc_con_display_progress_bar()
