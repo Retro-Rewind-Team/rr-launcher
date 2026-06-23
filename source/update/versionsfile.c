@@ -40,6 +40,10 @@ static void _rrc_curl_ssl_setup(CURL *curl)
     curl_easy_setopt(curl, CURLOPT_CAINFO_BLOB, &cainfo_blob);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+    curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_2);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L);
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
 }
 
 #define _RRC_VERSIONSFILE_URL "https://update.rwfc.net/RetroRewind/RetroRewindVersion.txt"
@@ -113,10 +117,6 @@ int rrc_versionsfile_get_versionsfile(char **result)
         curl_easy_setopt(curl, CURLOPT_XFERINFODATA, (void *)"Fetching Version Info");
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _rrc_versionsfile_write_callback);
-        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L); // 10 second connection timeout
-        // Set low speed limit to 30 bytes/s for at least 60 seconds before aborting
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 30L);
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L);
 
         res = curl_easy_perform(curl);
 
@@ -161,10 +161,6 @@ int rrc_versionsfile_get_removed_files(char **result)
         curl_easy_setopt(curl, CURLOPT_XFERINFODATA, (void *)"Fetching Removed Files");
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _rrc_versionsfile_write_callback);
-        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L); // 10 second connection timeout
-        // Set low speed limit to 30 bytes/s for at least 60 seconds before aborting
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 30L);
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L);
         
         CURLcode res = curl_easy_perform(curl);
         if (res != CURLE_OK)
