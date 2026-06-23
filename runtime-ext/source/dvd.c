@@ -297,8 +297,7 @@ custom_open_impl(const char *path, FileInfo *file_info)
     RTE_DBG("Open(%s)\n", path);
 
     s32 entry_num;
-    if (rte_dvd_resolve_path_to_entry_num(path, &entry_num))
-    {
+    if (rte_dvd_resolve_path_to_entry_num(path, &entry_num))    {
         rte_dvd_open_entry_num(entry_num, file_info);
         RTE_DBG("Found entrynum replacement: %d (addr %d)\n", entry_num, file_info->startAddr);
         return 1;

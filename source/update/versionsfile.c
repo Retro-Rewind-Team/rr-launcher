@@ -96,6 +96,11 @@ int rrc_versionsfile_get_versionsfile(char **result)
         curl_easy_setopt(curl, CURLOPT_XFERINFODATA, (void *)"Fetching Version Info");
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _rrc_versionsfile_write_callback);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L); // 10 second connection timeout
+        // Set low speed limit to 30 bytes/s for at least 60 seconds before aborting
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 30L);
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L);
+
         res = curl_easy_perform(curl);
 
         if (res != CURLE_OK)
@@ -138,6 +143,11 @@ int rrc_versionsfile_get_removed_files(char **result)
         curl_easy_setopt(curl, CURLOPT_XFERINFODATA, (void *)"Fetching Removed Files");
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _rrc_versionsfile_write_callback);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L); // 10 second connection timeout
+        // Set low speed limit to 30 bytes/s for at least 60 seconds before aborting
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 30L);
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L);
+        
         CURLcode res = curl_easy_perform(curl);
         if (res != CURLE_OK)
         {

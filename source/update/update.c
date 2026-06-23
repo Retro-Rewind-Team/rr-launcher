@@ -238,6 +238,10 @@ CURLcode _rrc_update_get_zip_size(char *url, curl_off_t *size)
         curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _rrc_update_writefunction_empty);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L); // 10 second connection timeout
+        // Set low speed limit to 30 bytes/s for at least 60 seconds before aborting
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 30L);
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L);
         cres = curl_easy_perform(curl);
         if (cres != CURLE_OK)
         {
@@ -272,6 +276,10 @@ struct rrc_result rrc_update_download_zip(char *url, char *filename, int current
         curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, _rrc_zipdl_progress_callback);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _rrc_zipdl_write_data_callback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L); // 10 second connection timeout
+        // Set low speed limit to 30 bytes/s for at least 60 seconds before aborting
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 30L);
+        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L);
 
         /* Perform the request, cres gets the return code */
         cres = curl_easy_perform(curl);
@@ -621,7 +629,7 @@ struct rrc_result rrc_update_do_updates(void *xfb, int *count, bool *updates_ins
     res = rrc_versionsfile_get_removed_files(&deleted_versionsfile);
     if (res < 0)
     {
-        RRC_FATAL("couldnt get files to remove! res: %i\n", res);
+        return rrc_result_create_error_curl(-res, "Failed to get files to remove.");
     }
 
     TRY(rrc_versionsfile_parse_deleted_files(deleted_versionsfile, &current, &deleted_files, &num_deleted_files));
