@@ -26,35 +26,23 @@
 #include "../settingsfile.h"
 #include "../result.h"
 
-/*
-        bool is_rr_mystuff = strcmp(elem_id, "RRLoad") == 0;
-        bool is_ctgpr_mystuff = strcmp(elem_id, "RRCTGPLoad") == 0;
-
-        // Skip music if the My Stuff exclusive option for it is disabled.
-        bool is_rr_music = strcmp(elem_id, "RRLoadMusic") == 0;
-        bool is_ctgp_music = strcmp(elem_id, "RRCTGPLoadMusic") == 0;
-
-*/
-
 #if defined(RRC_BETA) && RRC_BETA >= 1
-#   define RRC_RR_MY_STUFF_PATCH_ID "RRBetaLoad"
-#   define RRC_CTGP_MY_STUFF_PATCH_ID "RRBetaCTGPLoad"
-#   define RRC_RR_MUSIC_MY_STUFF_PATCH_ID "RRBetaLoadMusic"
-#   define RRC_CTGP_MUSIC_MY_STUFF_PATCH_ID "RRBetaCTGPLoadMusic"
+#define RRC_RR_MY_STUFF_PATCH_ID "RRBetaLoad"
+#define RRC_CTGP_MY_STUFF_PATCH_ID "RRBetaCTGPLoad"
+#define RRC_RR_MUSIC_MY_STUFF_PATCH_ID "RRBetaLoadMusic"
+#define RRC_CTGP_MUSIC_MY_STUFF_PATCH_ID "RRBetaCTGPLoadMusic"
 #else
-#   define RRC_RR_MY_STUFF_PATCH_ID "RRLoad"
-#   define RRC_CTGP_MY_STUFF_PATCH_ID "RRCTGPLoad"
-#   define RRC_RR_MUSIC_MY_STUFF_PATCH_ID "RRLoadMusic"
-#   define RRC_CTGP_MUSIC_MY_STUFF_PATCH_ID "RRCTGPLoadMusic"
+#define RRC_RR_MY_STUFF_PATCH_ID "RRLoad"
+#define RRC_CTGP_MY_STUFF_PATCH_ID "RRCTGPLoad"
+#define RRC_RR_MUSIC_MY_STUFF_PATCH_ID "RRLoadMusic"
+#define RRC_CTGP_MUSIC_MY_STUFF_PATCH_ID "RRCTGPLoadMusic"
 #endif
 
 #define MAX_FILE_PATCHES 1000
 #define MAX_MEMORY_PATCHES 128
 #define MAX_ENABLED_SETTINGS (64)
-// We only make the array as big as needed. Almost all folders will be well under this.
-#define MAX_FOLDER_FILES 1500
 /// Across all folders, we cannot cache more than this value.
-#define GLOBAL_MAX_FOLDER_FILES 5000
+#define GLOBAL_MAX_FOLDER_FILES 10000
 
 struct parse_riivo_output
 {
@@ -69,9 +57,9 @@ struct parse_riivo_output
  * The passed `dol` is overwritten if a main.dol replacement is encountered.
  */
 struct rrc_result rrc_riivo_patch_loader_parse(struct rrc_settingsfile *settings,
-                                               struct rrc_dol *dol,
                                                u32 *mem1,
                                                u32 *mem2,
+                                               struct rrc_dol *dol,
                                                struct parse_riivo_output *out);
 
 #endif

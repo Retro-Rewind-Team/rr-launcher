@@ -25,33 +25,31 @@
 
 #define RRC_RIIVO_XML_PATH "/" RRC_RETRO_REWIND_BASE_DIR "/xml/" RRC_RETRO_REWIND_BASE_DIR ".xml"
 
-enum rrc_riivo_disc_replacement_type
+struct rrc_riivo_sd_file
 {
-    RRC_RIIVO_FILE_REPLACEMENT,
-    RRC_RIIVO_FOLDER_REPLACEMENT,
-    /// It's technically a folder replacement, but in order to save space we just use this enum.
-    RRC_RIIVO_MY_STUFF_REPLACEMENT,
+    /* The SD card path to the file. */
+    const char *path;
+    /* Pointer to `rte_open_file`, initialized in runtime-ext when Open()-ing an entrynum */
+    void *file_info;
 };
 
-struct rrc_riivo_disc_replacement
+struct rrc_riivo_file_replacement
 {
-    enum rrc_riivo_disc_replacement_type type;
-    /// The replacement path on the SD card. 
-    const char *external;
-    /// The path on the disc itself.
+    /* Disc-path that should be replaced */
     const char *disc;
-    /// If a folder, this is a list of all found files in that folder. NULL if not a folder replacement.
-    /// We need to handle the edge case where we may have too many entries here, so this is not considered
-    /// guaranteed to be fully populated. We just hope it can catch 99% of lookups.
-    const char **folder_contents;
-    /// Same as above: 0 if not a folder replacement, otherwise the number of entries in `folder_contents`.
-    int folder_contents_count;
+    /* Hash of the file */
+    u32 hash;
+    /* Index into `rrc_riivo_sd_file[]` */
+    int entrynum;
 };
 
 struct rrc_riivo_disc
 {
-    u32 count;
-    struct rrc_riivo_disc_replacement replacements[0];
+    struct rrc_riivo_sd_file *sd_files;
+    int filename_replacements_count;
+    struct rrc_riivo_file_replacement *filename_replacements;
+    int replacements_count;
+    struct rrc_riivo_file_replacement *replacements;
 };
 
 struct rrc_riivo_memory_patch

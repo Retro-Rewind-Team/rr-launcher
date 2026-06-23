@@ -149,6 +149,7 @@ asm("patch_dol_helper:\n"
 
 void rrc_loader_load(struct rrc_dol *dol, struct rrc_settingsfile *settings, void *bi2_dest, u32 mem1_hi, u32 mem2_hi, char region)
 {
+
     struct rrc_result res;
 
     // runtime-ext needs to be loaded before parsing riivo patches, as it writes to a static.
@@ -158,7 +159,7 @@ void rrc_loader_load(struct rrc_dol *dol, struct rrc_settingsfile *settings, voi
 
     rrc_con_update("Load Patch Information", 80);
     struct parse_riivo_output riivo_out;
-    res = rrc_riivo_patch_loader_parse(settings, dol, &mem1_hi, &mem2_hi, &riivo_out);
+    res = rrc_riivo_patch_loader_parse(settings, &mem1_hi, &mem2_hi, dol, &riivo_out);
     rrc_result_error_check_error_fatal(res);
 
     rrc_con_update("Patch DVD Functions", 85);

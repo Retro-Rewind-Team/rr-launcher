@@ -10,7 +10,8 @@ LD := $(CC)
 MACHDEP := -DGEKKO -mrvl -mcpu=750 -meabi -mhard-float
 
 CFILES := $(wildcard source/*.c) $(wildcard vendor/**/*.c)
-OFILES := $(addprefix build/,$(CFILES:.c=.o))
+SHARED_CFILES := $(wildcard ../shared/*.c)
+OFILES := $(addprefix build/,$(CFILES:.c=.o)) $(patsubst ../shared/%,build/shared/%,$(SHARED_CFILES:.c=.o))
 
 # Prevent deletion of .o files, helps with incr rebuilds
 .SECONDARY: $(OFILES)
@@ -32,7 +33,7 @@ DOLS := $(addsuffix .dol, $(FILENAMES))
 ELFS := $(addsuffix .elf, $(FILENAMES))
 
 # Linker script is added per region in the elf rule
-LDFLAGS := $(OFILES) $(MACHDEP) -Wl,--section-start=.init=81744260,--section-start=.text=81744660,--section-start=.rodata=81782fe0
+LDFLAGS := $(OFILES) $(MACHDEP) -Wl,--section-start=.init=8175c900,--section-start=.text=8175cd00,--section-start=.rodata=81782fe0
 
 all: $(DOLS)
 
@@ -52,6 +53,11 @@ runtime-ext-%.elf: $(OFILES)
 	@echo Linking for region: $*...
 # Append -Tlinker-%.ld onto LDFLAGS so each region uses the correct linker script
 	@$(LD) $(LDFLAGS),-Tlinker-$*.ld -o $@
+
+build/shared/%.o: ../shared/%.c
+	@echo "$<"
+	@mkdir -p $(dir $@)
+	@$(CC) $(CFLAGS) $< -c -o $@
 
 build/%.o: %.c
 	@echo "$<"

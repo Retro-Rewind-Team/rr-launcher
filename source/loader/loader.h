@@ -35,7 +35,7 @@ bool rrc_signature_written();
 #define RRC_RUNTIME_EXT_ABI_VERSION_ADDRESS 0x817ffffc
 // Must be kept in sync with runtime-ext/base.ld's PROVIDE and pulsar
 #define RRC_RR_BITFLAGS 0x817ffff0
-// Must be kept in sync with the .riivo_disc_ptr section address in runtime-ext's linker script
+// Must be kept in sync with the .riivo_disc section address in runtime-ext's linker script
 #define RRC_RIIVO_DISC_PTR 0x81782fa0
 // Must be kept in sync with the .dvd_trampolines section address in runtime-ext's linker script
 #define RRC_TRAMPOLINE_START 0x81782d60
@@ -46,7 +46,7 @@ bool rrc_signature_written();
 // fixed-address static data, for example at 0x817ffff0 we have the rrc_bitflags.
 #define RRC_RUNTIME_EXT_DOL_SAFE_END (0x817fffff - 64)
 
-#define RRC_RUNTIME_EXT_DOL_SAFE_START 0x81744260
+#define RRC_RUNTIME_EXT_DOL_SAFE_START 0x8175c900
 
 // The "ABI version" of runtime-ext; incremented each time a breaking change to the ABI is necessary (different addresses etc.)
 // This needs to match the ABI version declared in Code.pul or otherwise an error is emitted.
