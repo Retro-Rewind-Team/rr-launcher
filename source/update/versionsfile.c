@@ -20,14 +20,30 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <curl/curl.h>
+#include <curl/easy.h>
 #include <string.h>
 
 #include "../console.h"
 #include "../util.h"
 #include "versionsfile.h"
 
-#define _RRC_VERSIONSFILE_URL "http://update.rwfc.net:8000/RetroRewind/RetroRewindVersion.txt"
-#define _RRC_VERSIONS_FILE_REMOVED_URL "http://update.rwfc.net:8000/RetroRewind/RetroRewindDelete.txt"
+extern const unsigned char cacert_pem[];
+extern const unsigned char cacert_pem_end[];
+
+static void _rrc_curl_ssl_setup(CURL *curl)
+{
+    struct curl_blob cainfo_blob = {
+        .data = (void *)cacert_pem,
+        .len = (size_t)(cacert_pem_end - cacert_pem),
+        .flags = CURL_BLOB_NOCOPY
+    };
+    curl_easy_setopt(curl, CURLOPT_CAINFO_BLOB, &cainfo_blob);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+}
+
+#define _RRC_VERSIONSFILE_URL "https://update.rwfc.net/RetroRewind/RetroRewindVersion.txt"
+#define _RRC_VERSIONS_FILE_REMOVED_URL "https://update.rwfc.net/RetroRewind/RetroRewindDelete.txt"
 // max array size
 #define _RRC_SPLIT_LIM 4096
 
@@ -89,6 +105,7 @@ int rrc_versionsfile_get_versionsfile(char **result)
     curl = curl_easy_init();
     if (curl)
     {
+        _rrc_curl_ssl_setup(curl);
         curl_easy_setopt(curl, CURLOPT_URL, _RRC_VERSIONSFILE_URL);
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
         curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
@@ -136,6 +153,7 @@ int rrc_versionsfile_get_removed_files(char **result)
     CURL *curl = curl_easy_init();
     if (curl)
     {
+        _rrc_curl_ssl_setup(curl);
         curl_easy_setopt(curl, CURLOPT_URL, _RRC_VERSIONS_FILE_REMOVED_URL);
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
         curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
