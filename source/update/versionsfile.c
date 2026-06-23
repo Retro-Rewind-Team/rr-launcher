@@ -20,14 +20,34 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <curl/curl.h>
+#include <curl/easy.h>
 #include <string.h>
 
 #include "../console.h"
 #include "../util.h"
 #include "versionsfile.h"
 
-#define _RRC_VERSIONSFILE_URL "http://update.rwfc.net:8000/RetroRewind/RetroRewindVersion.txt"
-#define _RRC_VERSIONS_FILE_REMOVED_URL "http://update.rwfc.net:8000/RetroRewind/RetroRewindDelete.txt"
+extern const unsigned char cacert_pem[];
+extern const unsigned char cacert_pem_end[];
+
+static void _rrc_curl_ssl_setup(CURL *curl)
+{
+    struct curl_blob cainfo_blob = {
+        .data = (void *)cacert_pem,
+        .len = (size_t)(cacert_pem_end - cacert_pem),
+        .flags = CURL_BLOB_NOCOPY
+    };
+    curl_easy_setopt(curl, CURLOPT_CAINFO_BLOB, &cainfo_blob);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+    curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_2);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L);
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
+}
+
+#define _RRC_VERSIONSFILE_URL "https://update.rwfc.net/RetroRewind/RetroRewindVersion.txt"
+#define _RRC_VERSIONS_FILE_REMOVED_URL "https://update.rwfc.net/RetroRewind/RetroRewindDelete.txt"
 // max array size
 #define _RRC_SPLIT_LIM 4096
 
@@ -89,6 +109,7 @@ int rrc_versionsfile_get_versionsfile(char **result)
     curl = curl_easy_init();
     if (curl)
     {
+        _rrc_curl_ssl_setup(curl);
         curl_easy_setopt(curl, CURLOPT_URL, _RRC_VERSIONSFILE_URL);
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
         curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
@@ -96,10 +117,6 @@ int rrc_versionsfile_get_versionsfile(char **result)
         curl_easy_setopt(curl, CURLOPT_XFERINFODATA, (void *)"Fetching Version Info");
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _rrc_versionsfile_write_callback);
-        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L); // 10 second connection timeout
-        // Set low speed limit to 30 bytes/s for at least 60 seconds before aborting
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 30L);
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L);
 
         res = curl_easy_perform(curl);
 
@@ -136,6 +153,7 @@ int rrc_versionsfile_get_removed_files(char **result)
     CURL *curl = curl_easy_init();
     if (curl)
     {
+        _rrc_curl_ssl_setup(curl);
         curl_easy_setopt(curl, CURLOPT_URL, _RRC_VERSIONS_FILE_REMOVED_URL);
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
         curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
@@ -143,10 +161,6 @@ int rrc_versionsfile_get_removed_files(char **result)
         curl_easy_setopt(curl, CURLOPT_XFERINFODATA, (void *)"Fetching Removed Files");
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, &s);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _rrc_versionsfile_write_callback);
-        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L); // 10 second connection timeout
-        // Set low speed limit to 30 bytes/s for at least 60 seconds before aborting
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 30L);
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L);
         
         CURLcode res = curl_easy_perform(curl);
         if (res != CURLE_OK)

@@ -26,6 +26,8 @@
 #include <zip.h>
 #include <errno.h>
 #include <wiisocket.h>
+#include <curl/curl.h>
+#include <curl/easy.h>
 
 #include "versionsfile.h"
 #include "update.h"
@@ -37,6 +39,25 @@
 #include "../shutdown.h"
 #include "../version.h"
 #include "../sd.h"
+
+extern const unsigned char cacert_pem[];
+extern const unsigned char cacert_pem_end[];
+
+static void _rrc_curl_ssl_setup(CURL *curl)
+{
+    struct curl_blob cainfo_blob = {
+        .data = (void *)cacert_pem,
+        .len = (size_t)(cacert_pem_end - cacert_pem),
+        .flags = CURL_BLOB_NOCOPY
+    };
+    curl_easy_setopt(curl, CURLOPT_CAINFO_BLOB, &cainfo_blob);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+    curl_easy_setopt(curl, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1_2 | CURL_SSLVERSION_MAX_TLSv1_2);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 30L);
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1L);
+    curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 30L);
+}
 
 #define _RRC_UPDATE_ZIP_NAME "rr.update.zip"
 
@@ -233,15 +254,12 @@ CURLcode _rrc_update_get_zip_size(char *url, curl_off_t *size)
     CURL *curl = curl_easy_init();
     if (curl)
     {
+        _rrc_curl_ssl_setup(curl);
         curl_easy_setopt(curl, CURLOPT_URL, url);
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
         curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _rrc_update_writefunction_empty);
-        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L); // 10 second connection timeout
-        // Set low speed limit to 30 bytes/s for at least 60 seconds before aborting
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 30L);
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L);
         cres = curl_easy_perform(curl);
         if (cres != CURLE_OK)
         {
@@ -269,6 +287,7 @@ struct rrc_result rrc_update_download_zip(char *url, char *filename, int current
             return rrc_result_create_error_errno(errno, "Failed to create temporary ZIP file for update download");
         }
 
+        _rrc_curl_ssl_setup(curl);
         curl_easy_setopt(curl, CURLOPT_URL, url);
         curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
         curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
@@ -276,10 +295,6 @@ struct rrc_result rrc_update_download_zip(char *url, char *filename, int current
         curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, _rrc_zipdl_progress_callback);
         curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, _rrc_zipdl_write_data_callback);
         curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
-        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L); // 10 second connection timeout
-        // Set low speed limit to 30 bytes/s for at least 60 seconds before aborting
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 30L);
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 60L);
 
         /* Perform the request, cres gets the return code */
         cres = curl_easy_perform(curl);
