@@ -39,6 +39,8 @@ bool rrc_signature_written();
 #define RRC_RIIVO_DISC_PTR 0x81782fa0
 // Must be kept in sync with the .dvd_trampolines section address in runtime-ext's linker script
 #define RRC_TRAMPOLINE_START 0x81782d60
+// Must be kept in sync with the .internal_version section address in runtime-ext's linker script
+#define RRC_RUNTIME_EXT_INTERNAL_VERSION 0x81782d50
 
 // The absolute highest address that the runtime-ext DOL may use.
 // We have an assert that makes sure we never copy past this.

@@ -35,7 +35,7 @@
 #include "../time.h"
 #include "../prompt.h"
 #include "../shutdown.h"
-#include "../version.h"
+#include "../versionutils.h"
 #include "../sd.h"
 
 #define _RRC_UPDATE_ZIP_NAME "rr.update.zip"

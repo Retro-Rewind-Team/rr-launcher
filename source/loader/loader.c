@@ -40,6 +40,7 @@
 #include <riivo.h>
 #include "../util.h"
 #include "../settingsfile.h"
+#include "../versionutils.h"
 #include <bitflags.h>
 
 bool rrc_signature_written()
@@ -156,6 +157,18 @@ void rrc_loader_load(struct rrc_dol *dol, struct rrc_settingsfile *settings, voi
     // All errors that happen here are fatal; we can't boot the game without knowing the patches or having the patched DVD functions.
     rrc_con_update("Load Runtime Extensions", 70);
     rrc_binary_load_runtime_ext(region);
+
+    struct rrc_version *runtime_ext_internal_version = (struct rrc_version *)RRC_RUNTIME_EXT_INTERNAL_VERSION;
+    if (!rrc_version_equals(runtime_ext_internal_version, &RRC_INTERNAL_VERSION))
+    {
+        struct rrc_result err = rrc_result_create_error_version_mismatch("runtime-ext version does not match channel\n"
+                                                                         "version!\n\n"
+                                                                         "Consider manually updating the channel at this time,\n"
+                                                                         "or join our discord if you need further help:\n"
+                                                                         "https://discord.gg/retrorewind");
+        rrc_result_error_check_error_fatal(err);
+        return;
+    }
 
     rrc_con_update("Load Patch Information", 80);
     struct parse_riivo_output riivo_out;

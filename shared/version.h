@@ -1,7 +1,7 @@
 /*
-    version.h - version structure and related functions
+    version.h - version structure
 
-    Copyright (C) 2025  Retro Rewind Team
+    Copyright (C) 2026  Retro Rewind Team
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -20,9 +20,6 @@
 #ifndef RRC_VERSION_H
 #define RRC_VERSION_H
 
-#include <gctypes.h>
-#include "result.h"
-
 #define _RRC_INTERNAL_VERSION_MAJOR 0
 #define _RRC_INTERNAL_VERSION_MINOR 9
 #define _RRC_INTERNAL_VERSION_PATCH 0
@@ -37,13 +34,5 @@ struct rrc_version
     int minor;
     int patch;
 };
-
-/// Returns true if version a is older than version b, false otherwise
-bool rrc_version_is_older(const struct rrc_version *a, const struct rrc_version *b);
-
-/// Parses a version string of the format "major.minor.patch" into a rrc_version struct. Returns an error if the format is invalid.
-struct rrc_result rrc_version_from_string(const char *version_str, struct rrc_version *out_version);
-
-bool rrc_version_equals(const struct rrc_version *a, const struct rrc_version *b);
 
 #endif /* RRC_VERSION_H */

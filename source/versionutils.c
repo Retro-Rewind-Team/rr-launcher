@@ -1,7 +1,7 @@
 /*
-    version.c - version structure and related functions
+    versionutils.c - utility function implementations for working with `rrc_version`s
 
-    Copyright (C) 2025  Retro Rewind Team
+    Copyright (C) 2026  Retro Rewind Team
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -17,7 +17,7 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include "version.h"
+#include "versionutils.h"
 #include <string.h>
 #include <stdlib.h>
 

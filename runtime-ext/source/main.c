@@ -30,11 +30,12 @@
 #include "dvd.h"
 #include "trampoline.h"
 #include <errno.h>
+#include <version.h>
 
-#define EXPORT_FUNCTION(secname, decl_args, call_args, implname) \
-    __attribute__((section(secname))) s32 __##implname decl_args \
-    {                                                            \
-        return implname call_args;                               \
+#define EXPORT_FUNCTION(secname, decl_args, call_args, implname)       \
+    __attribute__((section(secname), used)) s32 __##implname decl_args \
+    {                                                                  \
+        return implname call_args;                                     \
     }
 
 EXPORT_FUNCTION(".dvd_convert_path_to_entrynum", (const char *path), (path), custom_convert_path_to_entry_num_impl);
@@ -42,6 +43,8 @@ EXPORT_FUNCTION(".dvd_open", (const char *path, FileInfo *file_info), (path, fil
 EXPORT_FUNCTION(".dvd_fast_open", (s32 entry_num, FileInfo *file_info), (entry_num, file_info), custom_fast_open_impl);
 EXPORT_FUNCTION(".dvd_read_prio", (FileInfo * file_info, void *buffer, s32 length, s32 offset, s32 prio), (file_info, buffer, length, offset, prio), custom_read_prio_impl);
 EXPORT_FUNCTION(".dvd_close", (FileInfo * file_info), (file_info), custom_close_impl);
+
+__attribute__((section(".internal_version"), used)) struct rrc_version _rrc_internal_version = RRC_INTERNAL_VERSION;
 
 struct sd_vtable
 {
@@ -64,7 +67,7 @@ int SD_errno()
     return errno;
 }
 
-__attribute__((section(".sd_vtable"))) static struct sd_vtable __sd_vtable = {
+__attribute__((section(".sd_vtable"), used)) static struct sd_vtable __sd_vtable = {
     .open = SD_open,
     .close = SD_close,
     .read = SD_read,
@@ -81,15 +84,6 @@ __attribute__((section(".sd_vtable"))) static struct sd_vtable __sd_vtable = {
 
 int _start()
 {
-    // Prevent linker from DCE'ing the symbols
-    *(volatile u32 *)__custom_convert_path_to_entry_num_impl;
-    *(volatile u32 *)__custom_open_impl;
-    *(volatile u32 *)__custom_fast_open_impl;
-    *(volatile u32 *)__custom_read_prio_impl;
-    *(volatile u32 *)__custom_close_impl;
-    *(volatile u32 *)((volatile struct sd_vtable *)&__sd_vtable)->open;
-    *(volatile u32 *)(_rrc_trampoline_scratch_space);
-
     // Get the compiler to remove all unnecessary libogc deinitialization code, this function is never actually called
     while (1)
         ;

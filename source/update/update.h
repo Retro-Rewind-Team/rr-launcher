@@ -22,7 +22,7 @@
 #include <dir.h>
 #include <curl/curl.h>
 #include "../result.h"
-#include "../version.h"
+#include "../versionutils.h"
 
 #define RRC_UPDATE_LARGE_THRESHOLD (long)(1000 * 1000 * 100) /* 100MB */
 #define RRC_VERSIONFILE "/" RRC_RETRO_REWIND_BASE_DIR "/version.txt"
