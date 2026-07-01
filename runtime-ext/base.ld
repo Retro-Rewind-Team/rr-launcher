@@ -25,14 +25,15 @@ PHDRS {
 
 SECTIONS {
     # .init, .text and .rodata are specified in Makefile LDFLAGS
-    .dvd_trampolines              0x81782d60 : { *(.dvd_trampolines) }              :dvd
-    .sd_vtable                    0x81782e00 : { *(.sd_vtable) }                    :dvd
-    .dvd_convert_path_to_entrynum 0x81782e60 : { *(.dvd_convert_path_to_entrynum) } :dvd
-    .dvd_open                     0x81782ea0 : { *(.dvd_open) }                     :dvd
-    .dvd_fast_open                0x81782ee0 : { *(.dvd_fast_open) }                :dvd
-    .dvd_read_prio                0x81782f20 : { *(.dvd_read_prio) }                :dvd
-    .dvd_close                    0x81782f60 : { *(.dvd_close) }                    :dvd
-    .riivo_disc                   0x81782fa0 : { *(.riivo_disc) }                   :dvd
+    .internal_version             0x81782d50 : { KEEP(*(.internal_version)); }             :dvd
+    .dvd_trampolines              0x81782d60 : { KEEP(*(.dvd_trampolines)); }              :dvd
+    .sd_vtable                    0x81782e00 : { KEEP(*(.sd_vtable)); }                    :dvd
+    .dvd_convert_path_to_entrynum 0x81782e60 : { KEEP(*(.dvd_convert_path_to_entrynum)); } :dvd
+    .dvd_open                     0x81782ea0 : { KEEP(*(.dvd_open)); }                     :dvd
+    .dvd_fast_open                0x81782ee0 : { KEEP(*(.dvd_fast_open)); }                :dvd
+    .dvd_read_prio                0x81782f20 : { KEEP(*(.dvd_read_prio)); }                :dvd
+    .dvd_close                    0x81782f60 : { KEEP(*(.dvd_close)); }                    :dvd
+    .riivo_disc                   0x81782fa0 : { KEEP(*(.riivo_disc)); }                   :dvd
 
     PROVIDE(dvd_convert_path_to_entrynum_trampoline = ADDR(.dvd_trampolines));
     PROVIDE(dvd_fast_open_trampoline = ADDR(.dvd_trampolines) + 32);

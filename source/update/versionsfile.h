@@ -20,7 +20,7 @@
 #define RRC_VERSIONSFILE_H
 
 #include "../result.h"
-#include "../version.h"
+#include "../versionutils.h"
 
 struct rrc_versionsfile_deleted_file
 {
