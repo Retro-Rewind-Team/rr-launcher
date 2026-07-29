@@ -136,6 +136,7 @@ debug-package:
 	mkdir -p $(BUILD)/debug/apps/RetroRewind
 	cp runtime-ext/runtime-ext-* $(BUILD)/debug/RetroRewindChannel
 	cp $(OUTPUT).dol $(BUILD)/debug/apps/RetroRewind/boot.dol
+	cp data/cacert.pem $(BUILD)/debug/apps/RetroRewind/cacert.pem
 
 beta: EXTRA_CFLAGS := -DRRC_BETA=1
 beta: export EXTRA_CFLAGS := -DRRC_BETA=1
@@ -147,6 +148,7 @@ beta-package:
 	mkdir -p $(BUILD)/beta/apps/RetroRewindBeta
 	cp runtime-ext/runtime-ext-* $(BUILD)/beta/RetroRewindChannelBeta
 	cp $(OUTPUT).dol $(BUILD)/beta/apps/RetroRewindBeta/boot.dol
+	cp data/cacert.pem $(BUILD)/beta/apps/RetroRewindBeta/cacert.pem
 
 clean:
 	@echo clean ...
@@ -160,8 +162,9 @@ release: $(BUILD)
 	# Move files to correct places
 	mkdir -p $(RELEASE)/RetroRewindChannel
 	mkdir -p $(RELEASE)/apps/RetroRewind
-	cp runtime-ext/runtime-ext-* $(RELEASE)/RetroRewindChannel 
+	cp runtime-ext/runtime-ext-* $(RELEASE)/RetroRewindChannel
 	cp $(OUTPUT).dol $(RELEASE)/apps/RetroRewind/boot.dol
+	cp data/cacert.pem $(RELEASE)/apps/RetroRewind/cacert.pem
 	cp assets/THIRD_PARTY_NOTICES.txt $(RELEASE)/THIRD_PARTY_NOTICES.txt
 
 #---------------------------------------------------------------------------------
@@ -181,6 +184,10 @@ $(GAME_DOL_LOADER).o: $(GAME_DOL_LOADER).c
 #---------------------------------------------------------------------------------
 %.bin.o	:	%.bin
 #---------------------------------------------------------------------------------
+	@echo $(notdir $<)
+	$(bin2o)
+
+%.pem.o	:	%.pem
 	@echo $(notdir $<)
 	$(bin2o)
 
